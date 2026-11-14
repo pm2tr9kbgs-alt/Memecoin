@@ -5,6 +5,16 @@ from .config import Config
 from .models import Position, TokenCandidate
 
 
+GRADUATED_DEXES = {"pumpswap", "raydium", "meteora", "meteoradbc", "orca"}
+LAUNCHPAD_SUFFIXES = ("pump", "bonk")
+
+
+def is_graduated(c: TokenCandidate) -> bool:
+    """A launchpad token (pump.fun / bonk) trading on a real DEX pool has graduated from its bonding curve;
+    that pool's creation time is the graduation time."""
+    return c.mint.lower().endswith(LAUNCHPAD_SUFFIXES) and c.dex_id.lower() in GRADUATED_DEXES
+
+
 def screen_rejections(c: TokenCandidate, cfg: Config, now_ms: float | None = None) -> list[str]:
     """Reasons the candidate fails the market-data filters. Empty list == passes."""
     r: list[str] = []
@@ -27,6 +37,8 @@ def screen_rejections(c: TokenCandidate, cfg: Config, now_ms: float | None = Non
         r.append(f"5m change {c.price_change_m5_pct:+.1f}%")
     if c.price_change_h1_pct > cfg.max_price_change_h1_pct:
         r.append(f"1h change {c.price_change_h1_pct:+.0f}%")
+    if cfg.graduation_wait_minutes > 0 and age is not None and is_graduated(c) and age < cfg.graduation_wait_minutes:
+        r.append(f"graduated {age:.0f}m ago (waiting out post-graduation selling)")
     if cfg.min_hype_score > 0 and (h := hype_score(c)) < cfg.min_hype_score:
         r.append(f"hype {h:.0f}")
     return r

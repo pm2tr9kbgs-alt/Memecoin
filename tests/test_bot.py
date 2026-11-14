@@ -331,3 +331,13 @@ def test_hype_score():
     c = cfg(min_hype_score=50)
     assert screen_rejections(hyped, c, NOW * 1000) == []
     assert any("hype" in r for r in screen_rejections(fading, c, NOW * 1000))
+
+
+def test_wait_out_post_graduation_selling():
+    c = cfg(graduation_wait_minutes=20, min_pair_age_minutes=5)
+    just_graduated = good_candidate(mint="Abcpump", dex_id="pumpswap", pair_created_at_ms=int((NOW - 8 * 60) * 1000))
+    settled = good_candidate(mint="Abcpump", dex_id="pumpswap", pair_created_at_ms=int((NOW - 25 * 60) * 1000))
+    not_launchpad = good_candidate(mint="Xyz111", dex_id="raydium", pair_created_at_ms=int((NOW - 8 * 60) * 1000))
+    assert any("graduated" in r for r in screen_rejections(just_graduated, c, NOW * 1000))
+    assert screen_rejections(settled, c, NOW * 1000) == []
+    assert not any("graduated" in r for r in screen_rejections(not_launchpad, c, NOW * 1000))
