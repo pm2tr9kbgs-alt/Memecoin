@@ -218,3 +218,21 @@ def test_sign_jupiter_style_transaction():
     unsigned = VersionedTransaction.populate(msg, [])  # Jupiter returns the tx with empty signatures
     signed = VersionedTransaction.from_bytes(base64.b64decode(sign_transaction(base64.b64encode(bytes(unsigned)).decode(), kp)))
     assert signed.verify_with_results() == [True]
+
+
+def test_rugcheck_concentration_excludes_pool():
+    from memebot.safety import rugcheck_concentration
+
+    a, b = str(Keypair().pubkey()), str(Keypair().pubkey())
+    pool = str(Keypair().pubkey())  # even an on-curve market key is excluded when listed as a market
+    report = {
+        "markets": [{"pubkey": pool, "liquidityA": "vaultA"}],
+        "topHolders": [
+            {"address": "vaultA", "owner": pool, "pct": 40.0},
+            {"address": "x1", "owner": a, "pct": 6.0},
+            {"address": "x2", "owner": a, "pct": 1.0},
+            {"address": "x3", "owner": b, "pct": 3.0},
+        ],
+    }
+    top10, top1 = rugcheck_concentration(report)
+    assert top10 == pytest.approx(10.0) and top1 == pytest.approx(7.0)

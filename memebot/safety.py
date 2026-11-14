@@ -12,7 +12,7 @@ from .rpc import RPCError, SolanaRPC
 
 log = logging.getLogger(__name__)
 
-RUGCHECK_URL = "https://api.rugcheck.xyz/v1/tokens/{mint}/report/summary"
+RUGCHECK_URL = "https://api.rugcheck.xyz/v1/tokens/{mint}/report"
 
 
 def is_wallet(owner: str) -> bool:
@@ -43,6 +43,26 @@ def holder_concentration(largest: list[dict], owners: dict[str, str], supply: in
     return top10, top1
 
 
+def rugcheck_concentration(report: dict) -> tuple[float, float]:
+    """(top10 %, top1 %) from a RugCheck full report, excluding pools/markets and program-owned accounts."""
+    excluded: set[str] = set(report.get("knownAccounts") or {})
+    for m in report.get("markets") or []:
+        for key in ("pubkey", "liquidityA", "liquidityB", "liquidityAAccount", "liquidityBAccount"):
+            v = m.get(key)
+            if isinstance(v, dict):  # some RugCheck fields are account objects
+                v = v.get("pubkey") or v.get("address")
+            if isinstance(v, str):
+                excluded.add(v)
+    per_owner: dict[str, float] = {}
+    for h in report.get("topHolders") or []:
+        owner = h.get("owner") or ""
+        if owner in excluded or h.get("address") in excluded or not is_wallet(owner):
+            continue
+        per_owner[owner] = per_owner.get(owner, 0.0) + float(h.get("pct") or 0)
+    pcts = sorted(per_owner.values(), reverse=True)
+    return sum(pcts[:10]), (pcts[0] if pcts else 0.0)
+
+
 class SafetyChecker:
     def __init__(self, rpc: SolanaRPC, client: httpx.AsyncClient, cfg: Config):
         self.rpc = rpc
@@ -57,26 +77,45 @@ class SafetyChecker:
             report.freeze_authority = info["freeze_authority"]
             report.decimals = info["decimals"]
             report.supply = info["supply"]
+        except RPCError as exc:
+            report.errors.append(f"rpc: {exc}")
+            return report
+
+        holders_known = False
+        try:
             largest = await self.rpc.get_largest_accounts(mint)
             owners = await self.rpc.get_token_account_owners([a["address"] for a in largest])
             report.top10_holders_pct, report.top_holder_pct = holder_concentration(largest, owners, report.supply)
+            holders_known = True
         except RPCError as exc:
-            report.errors.append(f"rpc: {exc}")
+            # getTokenLargestAccounts is heavily rate-limited on free RPCs; fall back to RugCheck's holder list
+            log.debug("holder lookup via RPC failed for %s: %s", mint, exc)
 
         if self.cfg.use_rugcheck:
             try:
-                resp = await self.client.get(RUGCHECK_URL.format(mint=mint), timeout=10)
+                resp = await self.client.get(RUGCHECK_URL.format(mint=mint), timeout=15)
                 resp.raise_for_status()
                 data = resp.json()
                 score = data.get("score_normalised", data.get("score"))
                 report.rugcheck_score = float(score) if score is not None else None
                 report.rugcheck_dangers = [
-                    r.get("name", "?") for r in data.get("risks", []) if str(r.get("level", "")).lower() == "danger"
+                    r.get("name", "?") for r in data.get("risks") or [] if str(r.get("level", "")).lower() == "danger"
                 ]
-            except (httpx.HTTPError, ValueError) as exc:
+                if data.get("rugged"):
+                    report.rugcheck_dangers.append("marked rugged")
+                fee = (data.get("transferFee") or {}).get("pct") or 0
+                if fee:
+                    report.rugcheck_dangers.append(f"transfer fee {fee}%")
+                if not holders_known and data.get("topHolders") is not None:
+                    report.top10_holders_pct, report.top_holder_pct = rugcheck_concentration(data)
+                    holders_known = True
+            except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError) as exc:
                 log.debug("RugCheck lookup failed for %s: %s", mint, exc)
                 if self.cfg.rugcheck_required:
                     report.errors.append(f"rugcheck: {exc}")
+
+        if not holders_known:
+            report.errors.append("holder data unavailable (RPC rate-limited, no RugCheck data)")
         return report
 
 
