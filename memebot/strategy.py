@@ -1,0 +1,57 @@
+"""Entry screening and exit rules for the new-token momentum strategy. Pure functions, easy to test."""
+from __future__ import annotations
+
+from .config import Config
+from .models import Position, TokenCandidate
+
+
+def screen_rejections(c: TokenCandidate, cfg: Config, now_ms: float | None = None) -> list[str]:
+    """Reasons the candidate fails the market-data filters. Empty list == passes."""
+    r: list[str] = []
+    if not c.mint:
+        return ["missing mint"]
+    if not cfg.min_liquidity_usd <= c.liquidity_usd <= cfg.max_liquidity_usd:
+        r.append(f"liquidity ${c.liquidity_usd:,.0f}")
+    if not cfg.min_market_cap_usd <= c.market_cap_usd <= cfg.max_market_cap_usd:
+        r.append(f"mcap ${c.market_cap_usd:,.0f}")
+    age = c.age_minutes(now_ms)
+    if age is None or not cfg.min_pair_age_minutes <= age <= cfg.max_pair_age_minutes:
+        r.append(f"age {age if age is None else round(age)}m")
+    if c.volume_m5_usd < cfg.min_volume_m5_usd:
+        r.append(f"5m volume ${c.volume_m5_usd:,.0f}")
+    if c.buys_m5 + c.sells_m5 < cfg.min_txns_m5:
+        r.append(f"5m txns {c.buys_m5 + c.sells_m5}")
+    if c.buy_sell_ratio_m5 < cfg.min_buy_sell_ratio_m5:
+        r.append(f"5m buy/sell {c.buy_sell_ratio_m5:.2f}")
+    if not cfg.min_price_change_m5_pct <= c.price_change_m5_pct <= cfg.max_price_change_m5_pct:
+        r.append(f"5m change {c.price_change_m5_pct:+.1f}%")
+    if c.price_change_h1_pct > cfg.max_price_change_h1_pct:
+        r.append(f"1h change {c.price_change_h1_pct:+.0f}%")
+    return r
+
+
+def momentum_score(c: TokenCandidate) -> float:
+    """Rank passing candidates: favour buy pressure and volume relative to liquidity."""
+    vol_to_liq = c.volume_m5_usd / max(c.liquidity_usd, 1)
+    return c.buy_sell_ratio_m5 * 2 + vol_to_liq * 10 + c.price_change_m5_pct / 10
+
+
+def exit_reason(pos: Position, value_lamports: int, now: float, cfg: Config) -> str | None:
+    """Update the position's peak and return why it should be sold now, or None to keep holding."""
+    pos.last_value_lamports = value_lamports
+    if value_lamports > pos.peak_value_lamports:
+        pos.peak_value_lamports = value_lamports
+
+    pnl = pos.pnl_pct(value_lamports)
+    if pnl >= cfg.take_profit_pct:
+        return "take_profit"
+    if pnl <= -cfg.stop_loss_pct:
+        return "stop_loss"
+    peak_pnl = pos.pnl_pct(pos.peak_value_lamports)
+    if peak_pnl >= cfg.trailing_activation_pct:
+        drawdown = (1 - value_lamports / pos.peak_value_lamports) * 100
+        if drawdown >= cfg.trailing_stop_pct:
+            return "trailing_stop"
+    if (now - pos.opened_at) / 60 >= cfg.max_hold_minutes:
+        return "max_hold"
+    return None
