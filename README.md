@@ -37,8 +37,10 @@ Every fill is appended to `trades.csv`, and logs go to `bot.log`.
 2. Download this repo as a ZIP and extract it (e.g. to `Documents\memebot`).
 3. Open the `windows` folder and double-click, in order:
    - `1-setup.bat`: installs everything and creates `.env`
-   - `2-paper-trading.bat`: simulated trading (no wallet needed)
-   - `3-status.bat`: balance and open positions
+   - `2a-paper-STRICT.bat` (blue window): paper trading with the default filters → `trades-strict.csv`
+   - `2b-paper-LOOSE.bat` (yellow window): paper trading with looser filters → `trades-loose.csv`
+     (run both at once to compare; each has its own balance and files)
+   - `3a-status-STRICT.bat` / `3b-status-LOOSE.bat`: balance and open positions for each
    - `4-live-trading.bat`: real trading (needs `PRIVATE_KEY` and `MODE=live` in `.env`)
    - `5-sell-everything.bat`: emergency exit
 4. Edit settings with Notepad: right-click `.env` → Open with → Notepad.

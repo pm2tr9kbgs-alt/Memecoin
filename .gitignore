@@ -10,3 +10,6 @@ bot.log
 id.json
 *keypair*.json
 snapshots.csv
+state*.json
+trades*.csv
+bot*.log

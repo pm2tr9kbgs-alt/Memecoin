@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import signal
 import sys
 
@@ -21,7 +22,9 @@ from .wallet import load_keypair
 
 
 def setup_logging(cfg: Config, verbose: bool) -> None:
-    fmt = logging.Formatter("%(asctime)s %(levelname)-7s %(message)s", "%Y-%m-%d %H:%M:%S")
+    name = os.getenv("BOT_NAME", "").strip()
+    prefix = f"[{name}] " if name else ""
+    fmt = logging.Formatter(f"%(asctime)s {prefix}%(levelname)-7s %(message)s", "%Y-%m-%d %H:%M:%S")
     root = logging.getLogger()
     root.setLevel(logging.DEBUG if verbose else logging.INFO)
     for stream in (sys.stdout, sys.stderr):  # Windows consoles default to cp1252; token names can be any unicode
@@ -84,6 +87,8 @@ async def cmd_run(cfg: Config, assume_yes: bool) -> None:
 async def cmd_status(cfg: Config) -> None:
     async with httpx.AsyncClient() as client:
         bot = build(cfg, client)
+        name = os.getenv("BOT_NAME")
+        print(f"bot: {name}" if name else "bot: default")
         print(f"mode: {cfg.mode}")
         if cfg.is_live:
             print(f"wallet: {bot.ex.pubkey}")

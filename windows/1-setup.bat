@@ -23,7 +23,7 @@ if not exist .env (
   echo Created .env from .env.example
 )
 echo.
-echo Setup complete. Next: double-click 2-paper-trading.bat
+echo Setup complete. Next: double-click 2a-paper-STRICT.bat and 2b-paper-LOOSE.bat
 pause
 exit /b 0
 :error
