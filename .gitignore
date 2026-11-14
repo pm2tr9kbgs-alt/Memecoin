@@ -9,3 +9,4 @@ trades.csv
 bot.log
 id.json
 *keypair*.json
+snapshots.csv

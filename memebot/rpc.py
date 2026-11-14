@@ -20,7 +20,7 @@ class SolanaRPC:
         self.url = url
         self._ids = itertools.count(1)
 
-    async def call(self, method: str, params: list | None = None, retries: int = 3):
+    async def call(self, method: str, params: list | None = None, retries: int = 5):
         payload = {"jsonrpc": "2.0", "id": next(self._ids), "method": method, "params": params or []}
         last_exc: Exception | None = None
         for attempt in range(retries):
@@ -35,7 +35,9 @@ class SolanaRPC:
                 return body.get("result")
             except (httpx.HTTPError, ValueError) as exc:
                 last_exc = exc
-                await asyncio.sleep(0.5 * 2**attempt)
+                if attempt < retries - 1:
+                    # free public RPCs rate-limit hard (HTTP 429); back off 1, 2, 4, 8s
+                    await asyncio.sleep(2**attempt)
         raise RPCError(f"{method} failed after {retries} attempts: {last_exc}")
 
     async def get_balance(self, pubkey: str) -> int:

@@ -12,6 +12,13 @@ log = logging.getLogger(__name__)
 BASE_URL = "https://api.dexscreener.com"
 CHAIN = "solana"
 BATCH = 30  # max addresses per /tokens/v1 request
+DISCOVERY_PATHS = (
+    "/token-profiles/latest/v1",
+    "/token-boosts/latest/v1",
+    "/token-boosts/top/v1",
+    "/token-profiles/recent-updates/v1",
+    "/community-takeovers/latest/v1",
+)
 
 
 class DexScreener:
@@ -27,7 +34,7 @@ class DexScreener:
     async def latest_token_addresses(self) -> list[str]:
         """New token profiles and recently boosted tokens on Solana, newest first, de-duplicated."""
         seen: dict[str, None] = {}
-        for path in ("/token-profiles/latest/v1", "/token-boosts/latest/v1"):
+        for path in DISCOVERY_PATHS:
             try:
                 data = await self._get(path)
             except (httpx.HTTPError, ValueError) as exc:
