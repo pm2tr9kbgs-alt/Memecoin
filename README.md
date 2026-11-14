@@ -18,7 +18,7 @@ Jupiter, and sells on take-profit, stop-loss, trailing stop or a time limit.
    are tokens with more than 3.5 buys per sell in 5 minutes (`MAX_BUY_SELL_RATIO_M5`).
 3. **Momentum filters.** These check liquidity, market cap, pair age, 5-minute volume and transaction count,
    the buy/sell ratio, and the 5-minute price change. That change has a ceiling so the bot doesn't buy the top of a vertical candle.
-   **Graduation:** a pump.fun or bonk token that moved to a real DEX less than 3 minutes ago is skipped, because
+   **Graduation:** a pump.fun or bonk token that moved to a real DEX less than 10 minutes ago is skipped, because
    early buyers usually sell right after graduation (`GRADUATION_WAIT_MINUTES`).
 4. **Safety checks.** These run on-chain through your RPC, plus RugCheck:
    - mint authority and freeze authority must be revoked
@@ -35,7 +35,8 @@ Jupiter, and sells on take-profit, stop-loss, trailing stop or a time limit.
    actual token and SOL balance changes.
 7. **Manage.** Every `MONITOR_INTERVAL_SEC` it values each position with a real Jupiter sell quote. By default it
    **lets winners run**: there is no take-profit, and it sells once the value falls 20% below its highest point
-   (`TRAILING_STOP_PCT`). Before any gain, that is the same as a −20% stop-loss. Optional: `TAKE_PROFIT_PCT`
+   (`TRAILING_STOP_PCT`). Before any gain, that is the same as a −20% stop-loss. Once a position has been up +25%,
+   the trail tightens to 10% below the peak to keep more of the gain (`TIGHT_TRAIL_AFTER_PCT`, `TIGHT_TRAILING_STOP_PCT`). Optional: `TAKE_PROFIT_PCT`
    to cap gains, `TRAILING_ACTIVATION_PCT` to start trailing only after a gain, `MAX_HOLD_MINUTES` for a time limit.
    Positions that aren't at least +5% up after 30 minutes are sold to free the slot
    (`STALE_AFTER_MINUTES`, `STALE_MIN_PROFIT_PCT`).

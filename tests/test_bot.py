@@ -243,7 +243,7 @@ def test_rugcheck_concentration_excludes_pool():
 
 def test_let_winners_run_with_trailing_stop_from_peak():
     c = cfg(take_profit_pct=0, stop_loss_pct=20, trailing_activation_pct=0, trailing_stop_pct=20, max_hold_minutes=0,
-            stale_after_minutes=0)
+            stale_after_minutes=0, tight_trail_after_pct=0)  # base 20% trail only
     p = pos()
     assert exit_reason(p, 3_000_000, NOW, c) is None            # +200%: no take-profit, keep holding
     assert exit_reason(p, 2_500_000, NOW, c) is None            # 17% off the peak
@@ -364,3 +364,15 @@ async def test_winner_alerts_each_step_once(tmp_path):
     assert len(lines) == 2  # one alert per +25% step, not one per tick
     assert "+29." in lines[0] and "+59." in lines[1]  # after fees
     assert all("  A  https://dexscreener.com/solana/A" in line for line in lines)
+
+
+def test_trailing_stop_tightens_after_big_gain():
+    c = cfg(take_profit_pct=0, trailing_activation_pct=0, trailing_stop_pct=20, tight_trail_after_pct=25,
+            tight_trailing_stop_pct=10, stale_after_minutes=0, max_hold_minutes=0)
+    small = pos()
+    exit_reason(small, 1_200_000, NOW, c)                          # peak +20%: still the wide 20% trail
+    assert exit_reason(small, 1_060_000, NOW, c) is None          # 11.7% off the peak
+    big = pos()
+    exit_reason(big, 1_300_000, NOW, c)                            # peak +30%: tight 10% trail
+    assert exit_reason(big, 1_200_000, NOW, c) is None             # 7.7% off the peak
+    assert exit_reason(big, 1_160_000, NOW, c) == "trailing_stop"  # 10.8% off -> sell at about +16%

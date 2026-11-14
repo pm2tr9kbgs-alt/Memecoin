@@ -63,7 +63,7 @@ class Config:
     min_price_change_m5_pct: float = 3.0
     max_price_change_m5_pct: float = 40.0  # don't chase vertical candles
     max_price_change_h1_pct: float = 300.0
-    graduation_wait_minutes: float = 3.0  # skip launchpad tokens that moved to a DEX pool less than this ago
+    graduation_wait_minutes: float = 10.0  # skip launchpad tokens that moved to a DEX pool less than this ago
     min_hype_score: float = 0.0  # 0-100 from activity acceleration, socials and boosts (0 = off)
     max_hype_score: float = 60.0  # extreme hype was mostly coordinated pump-and-dumps in testing (0 = off)
     max_buy_sell_ratio_m5: float = 3.5  # very lopsided buying is usually bots pumping before a dump (0 = off)
@@ -88,6 +88,8 @@ class Config:
     stop_loss_pct: float = 20.0
     trailing_activation_pct: float = 0.0  # 0 = trailing stop active from entry (stop follows the peak)
     trailing_stop_pct: float = 20.0  # sell when value falls this far below the peak
+    tight_trail_after_pct: float = 25.0  # once the peak gain reaches this... (0 = off)
+    tight_trailing_stop_pct: float = 10.0  # ...trail this close instead, to keep more of the gain
     max_hold_minutes: float = 0.0  # 0 = no time limit
     stale_after_minutes: float = 30.0  # sell positions that haven't made STALE_MIN_PROFIT_PCT by then (0 = off)
     stale_min_profit_pct: float = 5.0
@@ -165,6 +167,8 @@ class Config:
             stop_loss_pct=_float("STOP_LOSS_PCT", d.stop_loss_pct),
             trailing_activation_pct=_float("TRAILING_ACTIVATION_PCT", d.trailing_activation_pct),
             trailing_stop_pct=_float("TRAILING_STOP_PCT", d.trailing_stop_pct),
+            tight_trail_after_pct=_float("TIGHT_TRAIL_AFTER_PCT", d.tight_trail_after_pct),
+            tight_trailing_stop_pct=_float("TIGHT_TRAILING_STOP_PCT", d.tight_trailing_stop_pct),
             max_hold_minutes=_float("MAX_HOLD_MINUTES", d.max_hold_minutes),
             stale_after_minutes=_float("STALE_AFTER_MINUTES", d.stale_after_minutes),
             stale_min_profit_pct=_float("STALE_MIN_PROFIT_PCT", d.stale_min_profit_pct),

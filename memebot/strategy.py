@@ -99,7 +99,10 @@ def exit_reason(pos: Position, value_lamports: int, now: float, cfg: Config) -> 
     peak_pnl = pos.pnl_pct(pos.peak_value_lamports)
     if peak_pnl >= cfg.trailing_activation_pct:
         drawdown = (1 - value_lamports / pos.peak_value_lamports) * 100
-        if drawdown >= cfg.trailing_stop_pct:
+        trail = cfg.trailing_stop_pct
+        if cfg.tight_trail_after_pct > 0 and peak_pnl >= cfg.tight_trail_after_pct:
+            trail = cfg.tight_trailing_stop_pct  # lock in more of a big gain
+        if drawdown >= trail:
             return "trailing_stop"
     held_min = (now - pos.opened_at) / 60
     if cfg.stale_after_minutes > 0 and held_min >= cfg.stale_after_minutes and pnl < cfg.stale_min_profit_pct:
