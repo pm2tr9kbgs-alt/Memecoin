@@ -285,3 +285,33 @@ async def test_watch_expires_without_dip(tmp_path):
 async def test_small_moves_bought_immediately(tmp_path):
     bot, _ = make_bot(tmp_path, [good_candidate("A", price_change_m5_pct=8)], dip_trigger_pct=15)
     assert await bot.scan_once(NOW) == ["A"]
+
+
+async def test_pyramiding_adds_to_winners_up_to_limit(tmp_path):
+    bot, jup = make_bot(tmp_path, [good_candidate("A")], take_profit_pct=0, trailing_activation_pct=0,
+                        trailing_stop_pct=20, stale_after_minutes=0, add_trigger_pct=30, add_amount_sol=0.025, max_adds=2)
+    await bot.scan_once(NOW)
+    pos = bot.state.positions["A"]
+    first_cost, first_tokens = pos.entry_lamports, pos.token_amount
+
+    jup.sell_rate["A"] = jup.buy_price["A"] = 1.35  # +35%: first add
+    await bot.monitor_once(NOW + 60)
+    assert pos.adds == 1 and pos.entry_lamports > first_cost and pos.token_amount > first_tokens
+
+    jup.sell_rate["A"] = jup.buy_price["A"] = 1.35 * 1.2  # only +20% since the add: no new add
+    await bot.monitor_once(NOW + 120)
+    assert pos.adds == 1
+
+    jup.sell_rate["A"] = jup.buy_price["A"] = 1.35 * 1.35  # +35% since the add: second add
+    await bot.monitor_once(NOW + 180)
+    assert pos.adds == 2
+
+    jup.sell_rate["A"] = jup.buy_price["A"] = 1.35 * 1.35 * 1.5  # limit reached
+    await bot.monitor_once(NOW + 240)
+    assert pos.adds == 2 and "A" in bot.state.positions
+
+    # a 25% drop from the peak sells the whole position, adds included
+    jup.sell_rate["A"] *= 0.75
+    assert await bot.monitor_once(NOW + 300) == ["A"]
+    csv_text = (tmp_path / "trades.csv").read_text()
+    assert csv_text.count(",add,") == 2 and "trailing_stop" in csv_text

@@ -164,7 +164,8 @@ class Bot:
 
         pos = Position(mint=c.mint, symbol=c.symbol, entry_lamports=res.lamports, token_amount=res.token_amount,
                        opened_at=now, entry_signature=res.signature, pair_address=c.pair_address,
-                       peak_value_lamports=res.lamports, last_value_lamports=res.lamports)
+                       peak_value_lamports=res.lamports, last_value_lamports=res.lamports,
+                       last_buy_price=res.lamports / res.token_amount)
         self.state.positions[c.mint] = pos
         self.state.traded_mints[c.mint] = now
         log_trade(cfg.trades_csv, cfg.mode, "buy", pos, res.lamports, res.token_amount, res.signature)
@@ -232,11 +233,54 @@ class Bot:
             reason = exit_reason(pos, value, now, self.cfg)
             log.debug("%s value %s (%+.1f%%, peak %+.1f%%)", pos.symbol, sol(value), pos.pnl_pct(value),
                       pos.pnl_pct(pos.peak_value_lamports))
-            if reason and await self.close(pos, reason):
-                sold.append(mint)
+            if reason:
+                if await self.close(pos, reason):
+                    sold.append(mint)
+            else:
+                await self._maybe_add(pos, value, now)
         if self.state.positions:
             self._persist()
         return sold
+
+    async def _maybe_add(self, pos: Position, value: int, now: float) -> bool:
+        """Pyramiding: add to a winner each time it rises add_trigger_pct above the last buy price."""
+        cfg = self.cfg
+        if cfg.add_trigger_pct <= 0 or pos.adds >= cfg.max_adds or pos.token_amount <= 0:
+            return False
+        price = value / pos.token_amount
+        if not pos.last_buy_price:
+            pos.last_buy_price = pos.entry_lamports / pos.token_amount if not pos.adds else price
+        if price < pos.last_buy_price * (1 + cfg.add_trigger_pct / 100) or self.daily_limit_hit():
+            return False
+        add_lamports = int(cfg.add_amount_sol * LAMPORTS_PER_SOL)
+        balance = await self.ex.sol_balance()
+        if balance - add_lamports - FEE_BUFFER_LAMPORTS < int(cfg.min_sol_reserve * LAMPORTS_PER_SOL):
+            return False
+        rise = (price / pos.last_buy_price - 1) * 100
+        log.info("ADD %s %s: up %+.1f%% since last buy (add %d/%d)", pos.symbol, sol(add_lamports), rise,
+                 pos.adds + 1, cfg.max_adds)
+        try:
+            res = await self.ex.buy(pos.mint, add_lamports)
+        except (TxFailed, RPCError, httpx.HTTPError, NoRouteError) as exc:
+            log.error("add to %s failed: %s", pos.symbol, exc)
+            pos.adds += 1  # don't retry the same add every tick
+            return False
+        if res.token_amount <= 0:
+            pos.adds += 1
+            return False
+        old_tokens = pos.token_amount
+        pos.token_amount += res.token_amount
+        pos.entry_lamports += res.lamports
+        # keep the trailing stop anchored to the peak *price*, not the old (smaller) position value
+        pos.peak_value_lamports = int(pos.peak_value_lamports * pos.token_amount / old_tokens)
+        pos.last_value_lamports = int(value * pos.token_amount / old_tokens)
+        pos.last_buy_price = res.lamports / res.token_amount
+        pos.adds += 1
+        log_trade(cfg.trades_csv, cfg.mode, "add", pos, res.lamports, res.token_amount, res.signature,
+                  f"add {pos.adds}/{cfg.max_adds}")
+        self._persist()
+        log.info("added to %s: now %s invested, %d tokens", pos.symbol, sol(pos.entry_lamports), pos.token_amount)
+        return True
 
     async def close(self, pos: Position, reason: str) -> bool:
         log.info("SELL %s (%s) reason=%s est %+.1f%%", pos.symbol, pos.mint, reason, pos.pnl_pct(pos.last_value_lamports))

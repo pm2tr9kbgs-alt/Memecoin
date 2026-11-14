@@ -87,6 +87,10 @@ class Config:
     max_hold_minutes: float = 0.0  # 0 = no time limit
     stale_after_minutes: float = 30.0  # sell positions that haven't made STALE_MIN_PROFIT_PCT by then (0 = off)
     stale_min_profit_pct: float = 5.0
+    # pyramiding: add add_amount_sol each time the price rises add_trigger_pct above the last buy (0 = off)
+    add_trigger_pct: float = 30.0
+    add_amount_sol: float = 0.025
+    max_adds: int = 2
 
     # --- loop & storage ---
     scan_interval_sec: float = 20.0
@@ -154,6 +158,9 @@ class Config:
             max_hold_minutes=_float("MAX_HOLD_MINUTES", d.max_hold_minutes),
             stale_after_minutes=_float("STALE_AFTER_MINUTES", d.stale_after_minutes),
             stale_min_profit_pct=_float("STALE_MIN_PROFIT_PCT", d.stale_min_profit_pct),
+            add_trigger_pct=_float("ADD_TRIGGER_PCT", d.add_trigger_pct),
+            add_amount_sol=_float("ADD_AMOUNT_SOL", d.add_amount_sol),
+            max_adds=_int("MAX_ADDS", d.max_adds),
             scan_interval_sec=_float("SCAN_INTERVAL_SEC", d.scan_interval_sec),
             monitor_interval_sec=_float("MONITOR_INTERVAL_SEC", d.monitor_interval_sec),
             state_file=_env("STATE_FILE", d.state_file),

@@ -32,6 +32,9 @@ Jupiter, and sells on take-profit, stop-loss, trailing stop or a time limit.
    to cap gains, `TRAILING_ACTIVATION_PCT` to start trailing only after a gain, `MAX_HOLD_MINUTES` for a time limit.
    Positions that aren't at least +5% up after 30 minutes are sold to free the slot
    (`STALE_AFTER_MINUTES`, `STALE_MIN_PROFIT_PCT`).
+   **Adding to winners:** each time a position rises +30% above its last buy, it adds 0.025 SOL, at most twice
+   (`ADD_TRIGGER_PCT`, `ADD_AMOUNT_SOL`, `MAX_ADDS`). This raises the average cost, so a sharp reversal after an
+   add can turn a winner into a small loss.
 7. **Risk limits:** `MAX_OPEN_POSITIONS`, `MIN_SOL_RESERVE`, and `DAILY_LOSS_LIMIT_SOL`, which stops new buys
    for the rest of the UTC day once that much has been lost.
 

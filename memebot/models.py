@@ -95,6 +95,8 @@ class Position:
     last_value_lamports: int = 0
     no_route_count: int = 0
     sell_failures: int = 0
+    adds: int = 0  # times we added to this position (pyramiding)
+    last_buy_price: float = 0.0  # lamports per raw token at the most recent buy/add
 
     def pnl_pct(self, value_lamports: int) -> float:
         if self.entry_lamports <= 0:
