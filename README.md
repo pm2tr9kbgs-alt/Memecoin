@@ -16,7 +16,7 @@ Jupiter, and sells on take-profit, stop-loss, trailing stop or a time limit.
    linked X / Telegram / website, and paid DexScreener boosts.
 3. **Momentum filters.** These check liquidity, market cap, pair age, 5-minute volume and transaction count,
    the buy/sell ratio, and the 5-minute price change. That change has a ceiling so the bot doesn't buy the top of a vertical candle.
-   **Graduation:** a pump.fun or bonk token that moved to a real DEX less than 5 minutes ago is skipped, because
+   **Graduation:** a pump.fun or bonk token that moved to a real DEX less than 3 minutes ago is skipped, because
    early buyers usually sell right after graduation (`GRADUATION_WAIT_MINUTES`).
 4. **Safety checks.** These run on-chain through your RPC, plus RugCheck:
    - mint authority and freeze authority must be revoked

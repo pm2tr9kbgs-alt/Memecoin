@@ -63,7 +63,7 @@ class Config:
     min_price_change_m5_pct: float = 3.0
     max_price_change_m5_pct: float = 40.0  # don't chase vertical candles
     max_price_change_h1_pct: float = 300.0
-    graduation_wait_minutes: float = 5.0  # skip launchpad tokens that moved to a DEX pool less than this ago
+    graduation_wait_minutes: float = 3.0  # skip launchpad tokens that moved to a DEX pool less than this ago
     min_hype_score: float = 0.0  # 0-100 from activity acceleration, socials and boosts (0 = off)
     # buy-the-dip: tokens up >= dip_trigger_pct in 5m go on a watchlist and are bought only after
     # pulling back dip_pct from their high; a drop beyond max_dip_pct means dumping -> skip. 0 = off
