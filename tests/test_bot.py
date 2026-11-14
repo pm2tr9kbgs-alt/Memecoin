@@ -138,11 +138,13 @@ class FakeJupiter:
 
     def __init__(self):
         self.sell_rate = {}  # mint -> lamports per 1000 tokens
+        self.buy_price = {}  # mint -> price multiplier for buys (2.0 = tokens cost twice as much)
         self.no_route = set()
 
     async def quote(self, input_mint, output_mint, amount, slippage_bps):
         if SOL_MINT == input_mint:
-            return {"outAmount": str(amount * 1000), "priceImpactPct": "0.01"}
+            mult = self.buy_price.get(output_mint, 1.0)
+            return {"outAmount": str(int(amount * 1000 / mult)), "priceImpactPct": "0.01"}
         if input_mint in self.no_route:
             raise NoRouteError("no route")
         rate = self.sell_rate.get(input_mint, 1.0)
@@ -258,3 +260,28 @@ def test_stale_positions_sold_winners_kept():
     assert exit_reason(pos(opened=NOW - 31 * 60), 1_030_000, NOW, c) == "stale"    # +3% after 31 min
     assert exit_reason(pos(opened=NOW - 31 * 60), 1_100_000, NOW, c) is None       # +10%: keep running
     assert exit_reason(pos(opened=NOW - 600 * 60), 1_500_000, NOW, c) is None      # big winner, any age
+
+
+async def test_spiked_token_bought_only_after_dip(tmp_path):
+    bot, jup = make_bot(tmp_path, [good_candidate("A", price_change_m5_pct=30), good_candidate("B", price_change_m5_pct=30)],
+                        dip_trigger_pct=15, dip_pct=5, max_dip_pct=20, dip_watch_minutes=15)
+    assert await bot.scan_once(NOW) == []  # spiked: watched, not bought
+    assert set(bot.watchlist) == {"A", "B"}
+    jup.buy_price.update(A=1.2, B=1.2)  # both keep rising: new highs
+    assert await bot.watch_once(NOW + 10) == []
+    jup.buy_price.update(A=1.13, B=0.9)  # A dips ~6% from the high, B dumps 25%
+    assert await bot.watch_once(NOW + 20) == ["A"]
+    assert "A" in bot.state.positions and bot.watchlist == {}
+    assert "B" not in bot.state.positions and "B" in bot.state.traded_mints  # dumped: cooled down
+
+
+async def test_watch_expires_without_dip(tmp_path):
+    bot, jup = make_bot(tmp_path, [good_candidate("A", price_change_m5_pct=30)], dip_watch_minutes=15)
+    await bot.scan_once(NOW)
+    assert await bot.watch_once(NOW + 16 * 60) == []
+    assert bot.watchlist == {} and bot.state.positions == {}
+
+
+async def test_small_moves_bought_immediately(tmp_path):
+    bot, _ = make_bot(tmp_path, [good_candidate("A", price_change_m5_pct=8)], dip_trigger_pct=15)
+    assert await bot.scan_once(NOW) == ["A"]

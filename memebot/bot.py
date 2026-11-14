@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from dataclasses import dataclass
 
 import httpx
 
@@ -24,6 +25,15 @@ NO_ROUTE_SELL_AFTER = 5
 FEE_BUFFER_LAMPORTS = 3_000_000  # priority fee + token account rent headroom
 
 
+@dataclass
+class Watch:
+    """A token that spiked: wait for a pullback from its high before buying."""
+    candidate: TokenCandidate
+    added_at: float
+    peak_price: float  # lamports per raw token unit (from Jupiter buy quotes)
+    last_price: float
+
+
 def sol(lamports: int) -> str:
     return f"{lamports / LAMPORTS_PER_SOL:.4f} SOL"
 
@@ -39,6 +49,7 @@ class Bot:
         self.state = state
         self._halt_logged = False
         self._stop = asyncio.Event()
+        self.watchlist: dict[str, Watch] = {}
 
     # ------------------------------------------------------------------ helpers
     def _persist(self) -> None:
@@ -50,7 +61,7 @@ class Bot:
         return self.state.realized_today() <= -int(self.cfg.daily_loss_limit_sol * LAMPORTS_PER_SOL)
 
     def _eligible(self, mint: str, now: float) -> bool:
-        if mint in self.state.positions or mint in self.state.blacklist:
+        if mint in self.state.positions or mint in self.state.blacklist or mint in self.watchlist:
             return False
         last = self.state.traded_mints.get(mint)
         return last is None or now - last > REBUY_COOLDOWN_SEC
@@ -124,8 +135,20 @@ class Bot:
             log.info("reject %s: no Jupiter route (%s)", c.symbol, exc)
             return False
 
+        if cfg.dip_trigger_pct > 0 and c.price_change_m5_pct >= cfg.dip_trigger_pct:
+            price = cfg.buy_amount_lamports / max(out_amount(quote), 1)
+            self.watchlist[c.mint] = Watch(c, now, price, price)
+            log.info("WATCH %s (%s): up %+.1f%% in 5m, waiting for a %.0f%% dip before buying",
+                     c.symbol, c.mint, c.price_change_m5_pct, cfg.dip_pct)
+            return False
+        return await self._execute_buy(c, quote, now)
+
+    async def _execute_buy(self, c: TokenCandidate, quote: dict, now: float, note: str = "") -> bool:
+        cfg = self.cfg
         log.info("BUY %s (%s) %s | liq $%s mcap $%s 5m %+.1f%% b/s %.2f", c.symbol, c.mint, sol(cfg.buy_amount_lamports),
                  f"{c.liquidity_usd:,.0f}", f"{c.market_cap_usd:,.0f}", c.price_change_m5_pct, c.buy_sell_ratio_m5)
+        if note:
+            log.info("    %s", note)
         try:
             res = await self.ex.buy(c.mint, cfg.buy_amount_lamports, quote)
         except (TxFailed, RPCError, httpx.HTTPError, NoRouteError) as exc:
@@ -148,6 +171,44 @@ class Bot:
         self._persist()
         log.info("bought %s: %d tokens for %s (%s)", c.symbol, res.token_amount, sol(res.lamports), res.signature)
         return True
+
+    async def watch_once(self, now: float | None = None) -> list[str]:
+        """Re-price watched (spiked) tokens; buy the ones that pulled back enough. Returns mints bought."""
+        now = now if now is not None else time.time()
+        cfg = self.cfg
+        bought: list[str] = []
+        for mint, w in list(self.watchlist.items()):
+            sym = w.candidate.symbol
+            if (now - w.added_at) / 60 > cfg.dip_watch_minutes:
+                log.info("UNWATCH %s: no dip within %.0f min", sym, cfg.dip_watch_minutes)
+                del self.watchlist[mint]
+                continue
+            try:
+                quote = await self.jup.quote(SOL_MINT, mint, cfg.buy_amount_lamports, cfg.buy_slippage_bps)
+            except NoRouteError:
+                continue
+            except (httpx.HTTPError, ValueError) as exc:
+                log.debug("watch quote %s failed: %s", sym, exc)
+                continue
+            price = cfg.buy_amount_lamports / max(out_amount(quote), 1)
+            w.last_price = price
+            w.peak_price = max(w.peak_price, price)
+            dip = (1 - price / w.peak_price) * 100
+            if dip > cfg.max_dip_pct:
+                log.info("UNWATCH %s: fell %.1f%% from its high (dumping, not a dip)", sym, dip)
+                del self.watchlist[mint]
+                self.state.traded_mints[mint] = now  # cool down; don't re-watch a dumping token
+                continue
+            if dip < cfg.dip_pct:
+                continue
+            if len(self.state.positions) >= cfg.max_open_positions or self.daily_limit_hit():
+                continue  # keep watching until a slot frees up
+            if price_impact_pct(quote) > cfg.max_price_impact_pct:
+                continue
+            del self.watchlist[mint]
+            if await self._execute_buy(w.candidate, quote, now, note=f"bought the dip: {dip:.1f}% below its high"):
+                bought.append(mint)
+        return bought
 
     # ------------------------------------------------------------------ exits
     async def monitor_once(self, now: float | None = None) -> list[str]:
@@ -222,6 +283,7 @@ class Bot:
         while not self._stop.is_set():
             try:
                 await self.monitor_once()
+                await self.watch_once()
                 if time.monotonic() >= next_scan:
                     next_scan = time.monotonic() + self.cfg.scan_interval_sec
                     await self.scan_once()

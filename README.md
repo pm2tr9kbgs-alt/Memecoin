@@ -20,15 +20,19 @@ Jupiter, and sells on take-profit, stop-loss, trailing stop or a time limit.
    - RugCheck "danger" risks and its normalised score
    - **round-trip quote:** it quotes buying, then quotes selling those tokens back. A large loss means a sell tax or honeypot.
    - a cap on price impact
-4. **Buy** `BUY_AMOUNT_SOL` with a Jupiter swap: it signs locally, sends, rebroadcasts until confirmed, then reads the
+4. **Wait for a dip after a spike.** A token already up 15%+ in 5 minutes isn't bought straight away: it goes on a
+   watchlist and is bought only after pulling back 5% from its high. A fall of more than 20% means it's dumping, so
+   it's dropped, and so is any token that doesn't dip within 15 minutes (`DIP_TRIGGER_PCT`, `DIP_PCT`, `MAX_DIP_PCT`,
+   `DIP_WATCH_MINUTES`).
+5. **Buy** `BUY_AMOUNT_SOL` with a Jupiter swap: it signs locally, sends, rebroadcasts until confirmed, then reads the
    actual token and SOL balance changes.
-5. **Manage.** Every `MONITOR_INTERVAL_SEC` it values each position with a real Jupiter sell quote. By default it
+6. **Manage.** Every `MONITOR_INTERVAL_SEC` it values each position with a real Jupiter sell quote. By default it
    **lets winners run**: there is no take-profit, and it sells once the value falls 20% below its highest point
    (`TRAILING_STOP_PCT`). Before any gain, that is the same as a −20% stop-loss. Optional: `TAKE_PROFIT_PCT`
    to cap gains, `TRAILING_ACTIVATION_PCT` to start trailing only after a gain, `MAX_HOLD_MINUTES` for a time limit.
    Positions that aren't at least +5% up after 30 minutes are sold to free the slot
    (`STALE_AFTER_MINUTES`, `STALE_MIN_PROFIT_PCT`).
-6. **Risk limits:** `MAX_OPEN_POSITIONS`, `MIN_SOL_RESERVE`, and `DAILY_LOSS_LIMIT_SOL`, which stops new buys
+7. **Risk limits:** `MAX_OPEN_POSITIONS`, `MIN_SOL_RESERVE`, and `DAILY_LOSS_LIMIT_SOL`, which stops new buys
    for the rest of the UTC day once that much has been lost.
 
 State (open positions, daily P&L, blacklist) is kept in `state.json`, so a restart picks up where it left off.
