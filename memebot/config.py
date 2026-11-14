@@ -79,6 +79,8 @@ class Config:
     trailing_activation_pct: float = 0.0  # 0 = trailing stop active from entry (stop follows the peak)
     trailing_stop_pct: float = 20.0  # sell when value falls this far below the peak
     max_hold_minutes: float = 0.0  # 0 = no time limit
+    stale_after_minutes: float = 30.0  # sell positions that haven't made STALE_MIN_PROFIT_PCT by then (0 = off)
+    stale_min_profit_pct: float = 5.0
 
     # --- loop & storage ---
     scan_interval_sec: float = 20.0
@@ -140,6 +142,8 @@ class Config:
             trailing_activation_pct=_float("TRAILING_ACTIVATION_PCT", d.trailing_activation_pct),
             trailing_stop_pct=_float("TRAILING_STOP_PCT", d.trailing_stop_pct),
             max_hold_minutes=_float("MAX_HOLD_MINUTES", d.max_hold_minutes),
+            stale_after_minutes=_float("STALE_AFTER_MINUTES", d.stale_after_minutes),
+            stale_min_profit_pct=_float("STALE_MIN_PROFIT_PCT", d.stale_min_profit_pct),
             scan_interval_sec=_float("SCAN_INTERVAL_SEC", d.scan_interval_sec),
             monitor_interval_sec=_float("MONITOR_INTERVAL_SEC", d.monitor_interval_sec),
             state_file=_env("STATE_FILE", d.state_file),

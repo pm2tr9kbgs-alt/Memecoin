@@ -67,7 +67,8 @@ def pos(entry=1_000_000, peak=None, opened=NOW):
 
 
 def test_exits():
-    c = cfg(take_profit_pct=60, stop_loss_pct=20, trailing_activation_pct=25, trailing_stop_pct=15, max_hold_minutes=120)
+    c = cfg(take_profit_pct=60, stop_loss_pct=20, trailing_activation_pct=25, trailing_stop_pct=15, max_hold_minutes=120,
+            stale_after_minutes=0)
     assert exit_reason(pos(), 1_700_000, NOW, c) == "take_profit"
     assert exit_reason(pos(), 790_000, NOW, c) == "stop_loss"
     assert exit_reason(pos(), 1_100_000, NOW, c) is None
@@ -239,7 +240,8 @@ def test_rugcheck_concentration_excludes_pool():
 
 
 def test_let_winners_run_with_trailing_stop_from_peak():
-    c = cfg(take_profit_pct=0, stop_loss_pct=20, trailing_activation_pct=0, trailing_stop_pct=20, max_hold_minutes=0)
+    c = cfg(take_profit_pct=0, stop_loss_pct=20, trailing_activation_pct=0, trailing_stop_pct=20, max_hold_minutes=0,
+            stale_after_minutes=0)
     p = pos()
     assert exit_reason(p, 3_000_000, NOW, c) is None            # +200%: no take-profit, keep holding
     assert exit_reason(p, 2_500_000, NOW, c) is None            # 17% off the peak
@@ -247,3 +249,12 @@ def test_let_winners_run_with_trailing_stop_from_peak():
     assert exit_reason(pos(), 810_000, NOW, c) is None
     assert exit_reason(pos(), 790_000, NOW, c) == "stop_loss"   # never went up: plain -20% stop
     assert exit_reason(pos(opened=NOW - 10_000 * 60), 1_000_000, NOW, c) is None  # no max hold
+
+
+def test_stale_positions_sold_winners_kept():
+    c = cfg(take_profit_pct=0, trailing_activation_pct=0, trailing_stop_pct=20, max_hold_minutes=0,
+            stale_after_minutes=30, stale_min_profit_pct=5)
+    assert exit_reason(pos(opened=NOW - 29 * 60), 1_000_000, NOW, c) is None       # flat, but only 29 min
+    assert exit_reason(pos(opened=NOW - 31 * 60), 1_030_000, NOW, c) == "stale"    # +3% after 31 min
+    assert exit_reason(pos(opened=NOW - 31 * 60), 1_100_000, NOW, c) is None       # +10%: keep running
+    assert exit_reason(pos(opened=NOW - 600 * 60), 1_500_000, NOW, c) is None      # big winner, any age

@@ -52,6 +52,9 @@ def exit_reason(pos: Position, value_lamports: int, now: float, cfg: Config) -> 
         drawdown = (1 - value_lamports / pos.peak_value_lamports) * 100
         if drawdown >= cfg.trailing_stop_pct:
             return "trailing_stop"
-    if cfg.max_hold_minutes > 0 and (now - pos.opened_at) / 60 >= cfg.max_hold_minutes:
+    held_min = (now - pos.opened_at) / 60
+    if cfg.stale_after_minutes > 0 and held_min >= cfg.stale_after_minutes and pnl < cfg.stale_min_profit_pct:
+        return "stale"  # not making money: free the slot for a better token
+    if cfg.max_hold_minutes > 0 and held_min >= cfg.max_hold_minutes:
         return "max_hold"
     return None

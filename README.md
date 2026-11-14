@@ -26,6 +26,8 @@ Jupiter, and sells on take-profit, stop-loss, trailing stop or a time limit.
    **lets winners run**: there is no take-profit, and it sells once the value falls 20% below its highest point
    (`TRAILING_STOP_PCT`). Before any gain, that is the same as a −20% stop-loss. Optional: `TAKE_PROFIT_PCT`
    to cap gains, `TRAILING_ACTIVATION_PCT` to start trailing only after a gain, `MAX_HOLD_MINUTES` for a time limit.
+   Positions that aren't at least +5% up after 30 minutes are sold to free the slot
+   (`STALE_AFTER_MINUTES`, `STALE_MIN_PROFIT_PCT`).
 6. **Risk limits:** `MAX_OPEN_POSITIONS`, `MIN_SOL_RESERVE`, and `DAILY_LOSS_LIMIT_SOL`, which stops new buys
    for the rest of the UTC day once that much has been lost.
 
