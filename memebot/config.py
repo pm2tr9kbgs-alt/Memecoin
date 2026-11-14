@@ -74,11 +74,11 @@ class Config:
     rugcheck_required: bool = False  # if True, a failed RugCheck lookup blocks the buy
 
     # --- exits ---
-    take_profit_pct: float = 60.0
+    take_profit_pct: float = 0.0  # 0 = no take-profit (exit only via stops / max hold)
     stop_loss_pct: float = 20.0
-    trailing_activation_pct: float = 25.0
-    trailing_stop_pct: float = 15.0  # sell when value falls this far below the peak
-    max_hold_minutes: float = 120.0
+    trailing_activation_pct: float = 0.0  # 0 = trailing stop active from entry (stop follows the peak)
+    trailing_stop_pct: float = 20.0  # sell when value falls this far below the peak
+    max_hold_minutes: float = 0.0  # 0 = no time limit
 
     # --- loop & storage ---
     scan_interval_sec: float = 20.0

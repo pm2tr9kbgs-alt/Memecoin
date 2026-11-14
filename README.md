@@ -22,9 +22,10 @@ Jupiter, and sells on take-profit, stop-loss, trailing stop or a time limit.
    - a cap on price impact
 4. **Buy** `BUY_AMOUNT_SOL` with a Jupiter swap: it signs locally, sends, rebroadcasts until confirmed, then reads the
    actual token and SOL balance changes.
-5. **Manage.** Every `MONITOR_INTERVAL_SEC` it values each position with a real Jupiter sell quote and exits on
-   `TAKE_PROFIT_PCT`, `STOP_LOSS_PCT`, a trailing stop (`TRAILING_STOP_PCT` below the peak once the gain has
-   reached `TRAILING_ACTIVATION_PCT`) or `MAX_HOLD_MINUTES`.
+5. **Manage.** Every `MONITOR_INTERVAL_SEC` it values each position with a real Jupiter sell quote. By default it
+   **lets winners run**: there is no take-profit, and it sells once the value falls 20% below its highest point
+   (`TRAILING_STOP_PCT`). Before any gain, that is the same as a −20% stop-loss. Optional: `TAKE_PROFIT_PCT`
+   to cap gains, `TRAILING_ACTIVATION_PCT` to start trailing only after a gain, `MAX_HOLD_MINUTES` for a time limit.
 6. **Risk limits:** `MAX_OPEN_POSITIONS`, `MIN_SOL_RESERVE`, and `DAILY_LOSS_LIMIT_SOL`, which stops new buys
    for the rest of the UTC day once that much has been lost.
 

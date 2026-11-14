@@ -43,7 +43,7 @@ def exit_reason(pos: Position, value_lamports: int, now: float, cfg: Config) -> 
         pos.peak_value_lamports = value_lamports
 
     pnl = pos.pnl_pct(value_lamports)
-    if pnl >= cfg.take_profit_pct:
+    if cfg.take_profit_pct > 0 and pnl >= cfg.take_profit_pct:  # 0 disables take-profit: let winners run
         return "take_profit"
     if pnl <= -cfg.stop_loss_pct:
         return "stop_loss"
@@ -52,6 +52,6 @@ def exit_reason(pos: Position, value_lamports: int, now: float, cfg: Config) -> 
         drawdown = (1 - value_lamports / pos.peak_value_lamports) * 100
         if drawdown >= cfg.trailing_stop_pct:
             return "trailing_stop"
-    if (now - pos.opened_at) / 60 >= cfg.max_hold_minutes:
+    if cfg.max_hold_minutes > 0 and (now - pos.opened_at) / 60 >= cfg.max_hold_minutes:
         return "max_hold"
     return None

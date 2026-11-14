@@ -173,7 +173,7 @@ async def test_max_open_positions(tmp_path):
 
 
 async def test_take_profit_round_trip_and_state(tmp_path):
-    bot, jup = make_bot(tmp_path, [good_candidate("A")])
+    bot, jup = make_bot(tmp_path, [good_candidate("A")], take_profit_pct=60)
     await bot.scan_once(NOW)
     jup.sell_rate["A"] = 2.0  # price doubles
     assert await bot.monitor_once(NOW + 60) == ["A"]
@@ -236,3 +236,14 @@ def test_rugcheck_concentration_excludes_pool():
     }
     top10, top1 = rugcheck_concentration(report)
     assert top10 == pytest.approx(10.0) and top1 == pytest.approx(7.0)
+
+
+def test_let_winners_run_with_trailing_stop_from_peak():
+    c = cfg(take_profit_pct=0, stop_loss_pct=20, trailing_activation_pct=0, trailing_stop_pct=20, max_hold_minutes=0)
+    p = pos()
+    assert exit_reason(p, 3_000_000, NOW, c) is None            # +200%: no take-profit, keep holding
+    assert exit_reason(p, 2_500_000, NOW, c) is None            # 17% off the peak
+    assert exit_reason(p, 2_390_000, NOW, c) == "trailing_stop"  # 20%+ off the peak -> sell at about +139%
+    assert exit_reason(pos(), 810_000, NOW, c) is None
+    assert exit_reason(pos(), 790_000, NOW, c) == "stop_loss"   # never went up: plain -20% stop
+    assert exit_reason(pos(opened=NOW - 10_000 * 60), 1_000_000, NOW, c) is None  # no max hold
