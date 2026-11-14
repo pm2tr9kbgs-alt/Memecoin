@@ -88,7 +88,7 @@ class Config:
     stale_after_minutes: float = 30.0  # sell positions that haven't made STALE_MIN_PROFIT_PCT by then (0 = off)
     stale_min_profit_pct: float = 5.0
     # pyramiding: add add_amount_sol each time the price rises add_trigger_pct above the last buy (0 = off)
-    add_trigger_pct: float = 30.0
+    add_trigger_pct: float = 50.0
     add_amount_sol: float = 0.025
     max_adds: int = 2
 
