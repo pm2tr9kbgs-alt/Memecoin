@@ -24,11 +24,16 @@ def setup_logging(cfg: Config, verbose: bool) -> None:
     fmt = logging.Formatter("%(asctime)s %(levelname)-7s %(message)s", "%Y-%m-%d %H:%M:%S")
     root = logging.getLogger()
     root.setLevel(logging.DEBUG if verbose else logging.INFO)
+    for stream in (sys.stdout, sys.stderr):  # Windows consoles default to cp1252; token names can be any unicode
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
     console = logging.StreamHandler()
     console.setFormatter(fmt)
     root.addHandler(console)
     if cfg.log_file:
-        fh = logging.FileHandler(cfg.log_file)
+        fh = logging.FileHandler(cfg.log_file, encoding="utf-8")
         fh.setFormatter(fmt)
         root.addHandler(fh)
     for noisy in ("httpx", "httpcore"):
@@ -130,6 +135,13 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(f"config error: {exc}")
     setup_logging(cfg, args.verbose)
 
+    try:
+        _dispatch(args, cfg)
+    except KeyboardInterrupt:  # Ctrl+C on Windows (no asyncio signal handlers there); state is saved after every trade
+        logging.getLogger("memebot").info("stopped by Ctrl+C")
+
+
+def _dispatch(args, cfg: Config) -> None:
     if args.cmd == "run":
         asyncio.run(cmd_run(cfg, args.yes))
     elif args.cmd == "status":

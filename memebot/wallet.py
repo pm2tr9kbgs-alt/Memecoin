@@ -13,7 +13,7 @@ def load_keypair(secret: str) -> Keypair:
     """Accepts a base58 secret key, a JSON byte array, or a path to a Solana CLI keypair file."""
     secret = secret.strip()
     if os.path.isfile(os.path.expanduser(secret)):
-        with open(os.path.expanduser(secret)) as fh:
+        with open(os.path.expanduser(secret), encoding="utf-8") as fh:
             secret = fh.read().strip()
     if secret.startswith("["):
         return Keypair.from_bytes(bytes(json.loads(secret)))

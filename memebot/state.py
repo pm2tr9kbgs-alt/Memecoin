@@ -29,7 +29,7 @@ class BotState:
     def load(cls, path: str) -> "BotState":
         if not os.path.exists(path):
             return cls(path=path)
-        with open(path) as fh:
+        with open(path, encoding="utf-8") as fh:
             raw = json.load(fh)
         return cls(
             path=path,
@@ -49,7 +49,7 @@ class BotState:
             "paper_balance": self.paper_balance,
         }
         tmp = self.path + ".tmp"
-        with open(tmp, "w") as fh:
+        with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(data, fh, indent=2)
         os.replace(tmp, self.path)
 
@@ -67,7 +67,7 @@ TRADE_FIELDS = ["time", "mode", "side", "symbol", "mint", "sol", "tokens", "pnl_
 def log_trade(path: str, mode: str, side: str, pos: Position, lamports: int, tokens: int,
               signature: str, reason: str = "", pnl_lamports: int | None = None) -> None:
     new = not os.path.exists(path)
-    with open(path, "a", newline="") as fh:
+    with open(path, "a", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, fieldnames=TRADE_FIELDS)
         if new:
             w.writeheader()

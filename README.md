@@ -31,7 +31,21 @@ Jupiter, and sells on take-profit, stop-loss, trailing stop or a time limit.
 State (open positions, daily P&L, blacklist) is kept in `state.json`, so a restart picks up where it left off.
 Every fill is appended to `trades.csv`, and logs go to `bot.log`.
 
-## Setup
+## Windows (no command line needed)
+
+1. Install Python 3.11+ from python.org and tick **"Add python.exe to PATH"**.
+2. Download this repo as a ZIP and extract it (e.g. to `Documents\memebot`).
+3. Open the `windows` folder and double-click, in order:
+   - `1-setup.bat`: installs everything and creates `.env`
+   - `2-paper-trading.bat`: simulated trading (no wallet needed)
+   - `3-status.bat`: balance and open positions
+   - `4-live-trading.bat`: real trading (needs `PRIVATE_KEY` and `MODE=live` in `.env`)
+   - `5-sell-everything.bat`: emergency exit
+4. Edit settings with Notepad: right-click `.env` → Open with → Notepad.
+5. Keep the PC awake (Settings → System → Power → Screen and sleep → Never when plugged in);
+   the bot only trades while its window is open.
+
+## Setup (Mac / Linux)
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate

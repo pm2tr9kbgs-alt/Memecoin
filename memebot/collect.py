@@ -26,7 +26,7 @@ async def collect(minutes: float, out: str, interval: float, track_minutes: floa
     end = time.time() + minutes * 60
     async with httpx.AsyncClient(headers={"User-Agent": "memebot-collector/1.0"}) as client:
         dex = DexScreener(client)
-        with open(out, "a", newline="") as fh:
+        with open(out, "a", newline="", encoding="utf-8") as fh:
             w = csv.DictWriter(fh, fieldnames=FIELDS)
             if new:
                 w.writeheader()

@@ -16,7 +16,7 @@ from statistics import mean, median
 
 def load(path: str) -> dict[str, list[dict]]:
     by_mint: dict[str, list[dict]] = defaultdict(list)
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         for r in csv.DictReader(fh):
             for k in ("ts", "price_usd", "liquidity_usd", "market_cap_usd", "volume_m5_usd", "buys_m5",
                       "sells_m5", "price_change_m5_pct", "price_change_h1_pct"):
