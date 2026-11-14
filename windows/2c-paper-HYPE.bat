@@ -9,8 +9,8 @@ set TRADES_CSV=trades-hype.csv
 set LOG_FILE=bot-hype.log
 rem Loose filters, but only tokens with a hype score of 40+ (activity speeding up, socials, boosts)
 set MIN_HYPE_SCORE=40
-set MIN_LIQUIDITY_USD=0
-set MIN_MARKET_CAP_USD=10000
+set MIN_LIQUIDITY_USD=10000
+set MIN_MARKET_CAP_USD=20000
 set MIN_VOLUME_M5_USD=1500
 set MIN_TXNS_M5=15
 set MIN_BUY_SELL_RATIO_M5=1.1

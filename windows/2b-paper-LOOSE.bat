@@ -8,8 +8,8 @@ set STATE_FILE=state-loose.json
 set TRADES_CSV=trades-loose.csv
 set LOG_FILE=bot-loose.log
 rem Looser entry filters (same as the cloud test)
-set MIN_LIQUIDITY_USD=0
-set MIN_MARKET_CAP_USD=10000
+set MIN_LIQUIDITY_USD=10000
+set MIN_MARKET_CAP_USD=20000
 set MIN_VOLUME_M5_USD=1500
 set MIN_TXNS_M5=15
 set MIN_BUY_SELL_RATIO_M5=1.1
