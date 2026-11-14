@@ -31,7 +31,8 @@ def setup_logging(cfg: Config, verbose: bool) -> None:
         fh = logging.FileHandler(cfg.log_file)
         fh.setFormatter(fmt)
         root.addHandler(fh)
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+    for noisy in ("httpx", "httpcore"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
 def build(cfg: Config, client: httpx.AsyncClient) -> Bot:
