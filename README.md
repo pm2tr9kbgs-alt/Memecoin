@@ -11,22 +11,25 @@ Jupiter, and sells on take-profit, stop-loss, trailing stop or a time limit.
 
 1. **Discover.** Every `SCAN_INTERVAL_SEC` it pulls the latest token profiles and boosts from the DexScreener API
    and looks up each token's most liquid Solana pair.
-2. **Momentum filters.** These check liquidity, market cap, pair age, 5-minute volume and transaction count,
+2. **Hype score (optional, `MIN_HYPE_SCORE`).** A 0–100 score from free DexScreener data: buys and volume in the
+   last 5 minutes compared with the hour's average (is attention speeding up right now?), buy/sell dominance,
+   linked X / Telegram / website, and paid DexScreener boosts.
+3. **Momentum filters.** These check liquidity, market cap, pair age, 5-minute volume and transaction count,
    the buy/sell ratio, and the 5-minute price change. That change has a ceiling so the bot doesn't buy the top of a vertical candle.
-3. **Safety checks.** These run on-chain through your RPC, plus RugCheck:
+4. **Safety checks.** These run on-chain through your RPC, plus RugCheck:
    - mint authority and freeze authority must be revoked
    - limits on how much the top 10 wallets and the single largest wallet hold. Pools and bonding curves are
      program-derived (off-curve) addresses and are left out of this count.
    - RugCheck "danger" risks and its normalised score
    - **round-trip quote:** it quotes buying, then quotes selling those tokens back. A large loss means a sell tax or honeypot.
    - a cap on price impact
-4. **Wait for a dip after a spike.** A token already up 15%+ in 5 minutes isn't bought straight away: it goes on a
+5. **Wait for a dip after a spike.** A token already up 15%+ in 5 minutes isn't bought straight away: it goes on a
    watchlist and is bought only after pulling back 5% from its high. A fall of more than 20% means it's dumping, so
    it's dropped, and so is any token that doesn't dip within 15 minutes (`DIP_TRIGGER_PCT`, `DIP_PCT`, `MAX_DIP_PCT`,
    `DIP_WATCH_MINUTES`).
-5. **Buy** `BUY_AMOUNT_SOL` with a Jupiter swap: it signs locally, sends, rebroadcasts until confirmed, then reads the
+6. **Buy** `BUY_AMOUNT_SOL` with a Jupiter swap: it signs locally, sends, rebroadcasts until confirmed, then reads the
    actual token and SOL balance changes.
-6. **Manage.** Every `MONITOR_INTERVAL_SEC` it values each position with a real Jupiter sell quote. By default it
+7. **Manage.** Every `MONITOR_INTERVAL_SEC` it values each position with a real Jupiter sell quote. By default it
    **lets winners run**: there is no take-profit, and it sells once the value falls 20% below its highest point
    (`TRAILING_STOP_PCT`). Before any gain, that is the same as a −20% stop-loss. Optional: `TAKE_PROFIT_PCT`
    to cap gains, `TRAILING_ACTIVATION_PCT` to start trailing only after a gain, `MAX_HOLD_MINUTES` for a time limit.
@@ -35,7 +38,7 @@ Jupiter, and sells on take-profit, stop-loss, trailing stop or a time limit.
    **Adding to winners:** each time a position rises +50% above its last buy, it adds 0.025 SOL, at most twice
    (`ADD_TRIGGER_PCT`, `ADD_AMOUNT_SOL`, `MAX_ADDS`). This raises the average cost, so a sharp reversal after an
    add can turn a winner into a small loss.
-7. **Risk limits:** `MAX_OPEN_POSITIONS`, `MIN_SOL_RESERVE`, and `DAILY_LOSS_LIMIT_SOL`, which stops new buys
+8. **Risk limits:** `MAX_OPEN_POSITIONS`, `MIN_SOL_RESERVE`, and `DAILY_LOSS_LIMIT_SOL`, which stops new buys
    for the rest of the UTC day once that much has been lost.
 
 State (open positions, daily P&L, blacklist) is kept in `state.json`, so a restart picks up where it left off.
@@ -49,8 +52,9 @@ Every fill is appended to `trades.csv`, and logs go to `bot.log`.
    - `1-setup.bat`: installs everything and creates `.env`
    - `2a-paper-STRICT.bat` (blue window): paper trading with the default filters → `trades-strict.csv`
    - `2b-paper-LOOSE.bat` (yellow window): paper trading with looser filters → `trades-loose.csv`
-     (run both at once to compare; each has its own balance and files)
-   - `3a-status-STRICT.bat` / `3b-status-LOOSE.bat`: balance and open positions for each
+   - `2c-paper-HYPE.bat` (purple window): loose filters, but only tokens with a **hype score** of 40+ → `trades-hype.csv`
+     (run them at once to compare; each has its own balance and files)
+   - `3a-status-STRICT.bat` / `3b-status-LOOSE.bat` / `3c-status-HYPE.bat`: balance and open positions for each
    - `4-live-trading.bat`: real trading (needs `PRIVATE_KEY` and `MODE=live` in `.env`)
    - `5-sell-everything.bat`: emergency exit
 4. Edit settings with Notepad: right-click `.env` → Open with → Notepad.

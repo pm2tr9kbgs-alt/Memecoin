@@ -31,6 +31,12 @@ class TokenCandidate:
     price_change_m5_pct: float
     price_change_h1_pct: float
     pair_created_at_ms: int | None
+    buys_h1: int = 0
+    sells_h1: int = 0
+    has_twitter: bool = False
+    has_telegram: bool = False
+    has_website: bool = False
+    boosts_active: int = 0
 
     @classmethod
     def from_pair(cls, pair: dict) -> "TokenCandidate":
@@ -39,6 +45,9 @@ class TokenCandidate:
         volume = pair.get("volume") or {}
         change = pair.get("priceChange") or {}
         created = pair.get("pairCreatedAt")
+        txns_h1 = (pair.get("txns") or {}).get("h1") or {}
+        info = pair.get("info") or {}
+        social_types = {str(x.get("type", "")).lower() for x in info.get("socials") or []}
         return cls(
             mint=base.get("address", ""),
             symbol=base.get("symbol", "?"),
@@ -55,6 +64,12 @@ class TokenCandidate:
             price_change_m5_pct=_num(change.get("m5")),
             price_change_h1_pct=_num(change.get("h1")),
             pair_created_at_ms=int(created) if created else None,
+            buys_h1=int(_num(txns_h1.get("buys"))),
+            sells_h1=int(_num(txns_h1.get("sells"))),
+            has_twitter=bool(social_types & {"twitter", "x"}),
+            has_telegram="telegram" in social_types,
+            has_website=bool(info.get("websites")),
+            boosts_active=int(_num((pair.get("boosts") or {}).get("active"))),
         )
 
     def age_minutes(self, now_ms: float | None = None) -> float | None:

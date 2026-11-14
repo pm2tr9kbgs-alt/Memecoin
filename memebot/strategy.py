@@ -27,7 +27,39 @@ def screen_rejections(c: TokenCandidate, cfg: Config, now_ms: float | None = Non
         r.append(f"5m change {c.price_change_m5_pct:+.1f}%")
     if c.price_change_h1_pct > cfg.max_price_change_h1_pct:
         r.append(f"1h change {c.price_change_h1_pct:+.0f}%")
+    if cfg.min_hype_score > 0 and (h := hype_score(c)) < cfg.min_hype_score:
+        r.append(f"hype {h:.0f}")
     return r
+
+
+def _ramp(x: float, lo: float, hi: float) -> float:
+    return max(0.0, min(1.0, (x - lo) / (hi - lo)))
+
+
+def hype_score(c: TokenCandidate) -> float:
+    """0-100 estimate of how much attention a token is getting *right now*, from free DexScreener data.
+
+    - buy acceleration (35): buys in the last 5 min vs the average 5 min of the last hour
+    - volume acceleration (20): same for volume
+    - buyer dominance (15): 5-min buy/sell ratio
+    - socials (15): X account, Telegram, website
+    - paid boosts (15): projects pay DexScreener to promote tokens they're pushing
+    """
+    import math
+
+    avg_buys_5m = c.buys_h1 / 12 if c.buys_h1 else 0
+    buy_accel = c.buys_m5 / avg_buys_5m if avg_buys_5m else (3.0 if c.buys_m5 >= 20 else 1.0)
+    avg_vol_5m = c.volume_h1_usd / 12 if c.volume_h1_usd else 0
+    vol_accel = c.volume_m5_usd / avg_vol_5m if avg_vol_5m else (3.0 if c.volume_m5_usd >= 5_000 else 1.0)
+    # acceleration only counts once there's real activity (6 buys "accelerating" from 6/hour isn't hype)
+    size_buys = min(c.buys_m5 / 30, 1.0)
+    size_vol = min(c.volume_m5_usd / 10_000, 1.0)
+    score = 35 * _ramp(buy_accel, 1.0, 3.0) * size_buys
+    score += 20 * _ramp(vol_accel, 1.0, 3.0) * size_vol
+    score += 15 * _ramp(c.buy_sell_ratio_m5, 1.0, 2.5) * size_buys
+    score += 8 * c.has_twitter + 4 * c.has_telegram + 3 * c.has_website
+    score += 15 * min(math.log10(1 + c.boosts_active) / 2, 1.0)
+    return round(score, 1)
 
 
 def momentum_score(c: TokenCandidate) -> float:

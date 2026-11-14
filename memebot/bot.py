@@ -16,7 +16,7 @@ from .models import Position, TokenCandidate
 from .rpc import RPCError
 from .safety import SafetyChecker, safety_rejections
 from .state import BotState, log_trade
-from .strategy import exit_reason, momentum_score, screen_rejections
+from .strategy import exit_reason, hype_score, momentum_score, screen_rejections
 
 log = logging.getLogger("memebot")
 
@@ -91,7 +91,7 @@ class Bot:
                 log.debug("skip %s (%s): %s", c.symbol, c.mint[:6], "; ".join(reasons))
             else:
                 passing.append(c)
-        passing.sort(key=momentum_score, reverse=True)
+        passing.sort(key=hype_score if self.cfg.min_hype_score > 0 else momentum_score, reverse=True)
         log.info("scan: %d new tokens, %d with pairs, %d pass momentum filters", len(mints), len(candidates), len(passing))
 
         bought: list[str] = []
@@ -145,8 +145,9 @@ class Bot:
 
     async def _execute_buy(self, c: TokenCandidate, quote: dict, now: float, note: str = "") -> bool:
         cfg = self.cfg
-        log.info("BUY %s (%s) %s | liq $%s mcap $%s 5m %+.1f%% b/s %.2f", c.symbol, c.mint, sol(cfg.buy_amount_lamports),
-                 f"{c.liquidity_usd:,.0f}", f"{c.market_cap_usd:,.0f}", c.price_change_m5_pct, c.buy_sell_ratio_m5)
+        log.info("BUY %s (%s) %s | liq $%s mcap $%s 5m %+.1f%% b/s %.2f hype %.0f", c.symbol, c.mint,
+                 sol(cfg.buy_amount_lamports), f"{c.liquidity_usd:,.0f}", f"{c.market_cap_usd:,.0f}",
+                 c.price_change_m5_pct, c.buy_sell_ratio_m5, hype_score(c))
         if note:
             log.info("    %s", note)
         try:

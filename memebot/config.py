@@ -63,6 +63,7 @@ class Config:
     min_price_change_m5_pct: float = 3.0
     max_price_change_m5_pct: float = 40.0  # don't chase vertical candles
     max_price_change_h1_pct: float = 300.0
+    min_hype_score: float = 0.0  # 0-100 from activity acceleration, socials and boosts (0 = off)
     # buy-the-dip: tokens up >= dip_trigger_pct in 5m go on a watchlist and are bought only after
     # pulling back dip_pct from their high; a drop beyond max_dip_pct means dumping -> skip. 0 = off
     dip_trigger_pct: float = 15.0
@@ -140,6 +141,7 @@ class Config:
             min_price_change_m5_pct=_float("MIN_PRICE_CHANGE_M5_PCT", d.min_price_change_m5_pct),
             max_price_change_m5_pct=_float("MAX_PRICE_CHANGE_M5_PCT", d.max_price_change_m5_pct),
             max_price_change_h1_pct=_float("MAX_PRICE_CHANGE_H1_PCT", d.max_price_change_h1_pct),
+            min_hype_score=_float("MIN_HYPE_SCORE", d.min_hype_score),
             dip_trigger_pct=_float("DIP_TRIGGER_PCT", d.dip_trigger_pct),
             dip_pct=_float("DIP_PCT", d.dip_pct),
             max_dip_pct=_float("MAX_DIP_PCT", d.max_dip_pct),

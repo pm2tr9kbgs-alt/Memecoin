@@ -315,3 +315,19 @@ async def test_pyramiding_adds_to_winners_up_to_limit(tmp_path):
     assert await bot.monitor_once(NOW + 300) == ["A"]
     csv_text = (tmp_path / "trades.csv").read_text()
     assert csv_text.count(",add,") == 2 and "trailing_stop" in csv_text
+
+
+def test_hype_score():
+    from memebot.strategy import hype_score
+
+    quiet = good_candidate(buys_m5=6, sells_m5=1, buys_h1=6, volume_m5_usd=500, volume_h1_usd=500)
+    hyped = good_candidate(buys_m5=150, sells_m5=50, buys_h1=300, volume_m5_usd=40_000, volume_h1_usd=120_000,
+                           has_twitter=True, has_telegram=True, has_website=True, boosts_active=100)
+    fading = good_candidate(buys_m5=40, sells_m5=60, buys_h1=1200, volume_m5_usd=10_000, volume_h1_usd=300_000,
+                            has_twitter=True)
+    assert hype_score(hyped) > 85
+    assert hype_score(quiet) < 15
+    assert hype_score(fading) < 20
+    c = cfg(min_hype_score=50)
+    assert screen_rejections(hyped, c, NOW * 1000) == []
+    assert any("hype" in r for r in screen_rejections(fading, c, NOW * 1000))
