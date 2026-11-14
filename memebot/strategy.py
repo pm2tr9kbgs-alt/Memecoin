@@ -39,8 +39,13 @@ def screen_rejections(c: TokenCandidate, cfg: Config, now_ms: float | None = Non
         r.append(f"1h change {c.price_change_h1_pct:+.0f}%")
     if cfg.graduation_wait_minutes > 0 and age is not None and is_graduated(c) and age < cfg.graduation_wait_minutes:
         r.append(f"graduated {age:.0f}m ago (waiting out post-graduation selling)")
-    if cfg.min_hype_score > 0 and (h := hype_score(c)) < cfg.min_hype_score:
+    if cfg.max_buy_sell_ratio_m5 > 0 and c.buy_sell_ratio_m5 > cfg.max_buy_sell_ratio_m5:
+        r.append(f"5m buy/sell {c.buy_sell_ratio_m5:.1f} looks like a coordinated pump")
+    h = hype_score(c)
+    if cfg.min_hype_score > 0 and h < cfg.min_hype_score:
         r.append(f"hype {h:.0f}")
+    if cfg.max_hype_score > 0 and h > cfg.max_hype_score:
+        r.append(f"hype {h:.0f} too high (pump-and-dump pattern)")
     return r
 
 

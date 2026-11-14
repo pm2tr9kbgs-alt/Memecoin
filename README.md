@@ -13,7 +13,9 @@ Jupiter, and sells on take-profit, stop-loss, trailing stop or a time limit.
    and looks up each token's most liquid Solana pair.
 2. **Hype score (optional, `MIN_HYPE_SCORE`).** A 0–100 score from free DexScreener data: buys and volume in the
    last 5 minutes compared with the hour's average (is attention speeding up right now?), buy/sell dominance,
-   linked X / Telegram / website, and paid DexScreener boosts.
+   linked X / Telegram / website, and paid DexScreener boosts. **Very high hype is treated as a warning:** in testing,
+   every trade with a score above 60 was a pump-and-dump, so tokens above `MAX_HYPE_SCORE` (60) are skipped, and so
+   are tokens with more than 3.5 buys per sell in 5 minutes (`MAX_BUY_SELL_RATIO_M5`).
 3. **Momentum filters.** These check liquidity, market cap, pair age, 5-minute volume and transaction count,
    the buy/sell ratio, and the 5-minute price change. That change has a ceiling so the bot doesn't buy the top of a vertical candle.
    **Graduation:** a pump.fun or bonk token that moved to a real DEX less than 3 minutes ago is skipped, because
@@ -54,7 +56,7 @@ Every fill is appended to `trades.csv`, and logs go to `bot.log`.
    - `1-setup.bat`: installs everything and creates `.env`
    - `2a-paper-STRICT.bat` (blue window): paper trading with the default filters → `trades-strict.csv`
    - `2b-paper-LOOSE.bat` (yellow window): paper trading with looser filters → `trades-loose.csv`
-   - `2c-paper-HYPE.bat` (purple window): loose filters, but only tokens with a **hype score** of 40+ → `trades-hype.csv`
+   - `2c-paper-HYPE.bat` (purple window): loose filters, but only tokens with a **hype score** of 25–60 → `trades-hype.csv`
      (run them at once to compare; each has its own balance and files)
    - `3a-status-STRICT.bat` / `3b-status-LOOSE.bat` / `3c-status-HYPE.bat`: balance and open positions for each
    - `4-live-trading.bat`: real trading (needs `PRIVATE_KEY` and `MODE=live` in `.env`)

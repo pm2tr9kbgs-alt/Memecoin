@@ -91,7 +91,7 @@ class Bot:
                 log.debug("skip %s (%s): %s", c.symbol, c.mint[:6], "; ".join(reasons))
             else:
                 passing.append(c)
-        passing.sort(key=hype_score if self.cfg.min_hype_score > 0 else momentum_score, reverse=True)
+        passing.sort(key=momentum_score, reverse=True)
         log.info("scan: %d new tokens, %d with pairs, %d pass momentum filters", len(mints), len(candidates), len(passing))
 
         bought: list[str] = []

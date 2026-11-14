@@ -65,6 +65,8 @@ class Config:
     max_price_change_h1_pct: float = 300.0
     graduation_wait_minutes: float = 3.0  # skip launchpad tokens that moved to a DEX pool less than this ago
     min_hype_score: float = 0.0  # 0-100 from activity acceleration, socials and boosts (0 = off)
+    max_hype_score: float = 60.0  # extreme hype was mostly coordinated pump-and-dumps in testing (0 = off)
+    max_buy_sell_ratio_m5: float = 3.5  # very lopsided buying is usually bots pumping before a dump (0 = off)
     # buy-the-dip: tokens up >= dip_trigger_pct in 5m go on a watchlist and are bought only after
     # pulling back dip_pct from their high; a drop beyond max_dip_pct means dumping -> skip. 0 = off
     dip_trigger_pct: float = 15.0
@@ -144,6 +146,8 @@ class Config:
             max_price_change_h1_pct=_float("MAX_PRICE_CHANGE_H1_PCT", d.max_price_change_h1_pct),
             graduation_wait_minutes=_float("GRADUATION_WAIT_MINUTES", d.graduation_wait_minutes),
             min_hype_score=_float("MIN_HYPE_SCORE", d.min_hype_score),
+            max_hype_score=_float("MAX_HYPE_SCORE", d.max_hype_score),
+            max_buy_sell_ratio_m5=_float("MAX_BUY_SELL_RATIO_M5", d.max_buy_sell_ratio_m5),
             dip_trigger_pct=_float("DIP_TRIGGER_PCT", d.dip_trigger_pct),
             dip_pct=_float("DIP_PCT", d.dip_pct),
             max_dip_pct=_float("MAX_DIP_PCT", d.max_dip_pct),

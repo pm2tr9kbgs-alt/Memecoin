@@ -328,7 +328,7 @@ def test_hype_score():
     assert hype_score(hyped) > 85
     assert hype_score(quiet) < 15
     assert hype_score(fading) < 20
-    c = cfg(min_hype_score=50)
+    c = cfg(min_hype_score=50, max_hype_score=0)  # ceiling off: only test the minimum here
     assert screen_rejections(hyped, c, NOW * 1000) == []
     assert any("hype" in r for r in screen_rejections(fading, c, NOW * 1000))
 
@@ -341,3 +341,12 @@ def test_wait_out_post_graduation_selling():
     assert any("graduated" in r for r in screen_rejections(just_graduated, c, NOW * 1000))
     assert screen_rejections(settled, c, NOW * 1000) == []
     assert not any("graduated" in r for r in screen_rejections(not_launchpad, c, NOW * 1000))
+
+
+def test_extreme_hype_and_lopsided_buying_rejected():
+    c = cfg(max_hype_score=60, max_buy_sell_ratio_m5=3.5)
+    pumped = good_candidate(buys_m5=150, sells_m5=30, buys_h1=300, volume_m5_usd=40_000, volume_h1_usd=120_000,
+                            has_twitter=True, has_telegram=True, has_website=True, boosts_active=100)
+    reasons = screen_rejections(pumped, c, NOW * 1000)
+    assert any("coordinated pump" in r for r in reasons) and any("too high" in r for r in reasons)
+    assert screen_rejections(good_candidate(), c, NOW * 1000) == []
