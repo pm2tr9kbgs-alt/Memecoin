@@ -350,3 +350,17 @@ def test_extreme_hype_and_lopsided_buying_rejected():
     reasons = screen_rejections(pumped, c, NOW * 1000)
     assert any("coordinated pump" in r for r in reasons) and any("too high" in r for r in reasons)
     assert screen_rejections(good_candidate(), c, NOW * 1000) == []
+
+
+async def test_winner_alerts_each_step_once(tmp_path):
+    winners = tmp_path / "winners.txt"
+    bot, jup = make_bot(tmp_path, [good_candidate("A")], take_profit_pct=0, add_trigger_pct=0, stale_after_minutes=0,
+                        winner_alert_pct=25, winners_file=str(winners))
+    await bot.scan_once(NOW)
+    for rate in (1.1, 1.3, 1.35, 1.6):  # +10%: none; +30%: alert 25; +35%: same level; +60%: alert 50
+        jup.sell_rate["A"] = rate
+        await bot.monitor_once(NOW + 60)
+    lines = winners.read_text().splitlines()
+    assert len(lines) == 2  # one alert per +25% step, not one per tick
+    assert "+29." in lines[0] and "+59." in lines[1]  # after fees
+    assert all("  A  https://dexscreener.com/solana/A" in line for line in lines)

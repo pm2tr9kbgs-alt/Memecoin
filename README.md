@@ -42,6 +42,8 @@ Jupiter, and sells on take-profit, stop-loss, trailing stop or a time limit.
    **Adding to winners:** each time a position rises +50% above its last buy, it adds 0.025 SOL, at most twice
    (`ADD_TRIGGER_PCT`, `ADD_AMOUNT_SOL`, `MAX_ADDS`). This raises the average cost, so a sharp reversal after an
    add can turn a winner into a small loss.
+   **Winner alerts:** each time a position gains another 25% (+25%, +50%, ...), the bot logs a `WINNER` line with the
+   token address and DexScreener link and appends it to `winners.txt` (`WINNER_ALERT_PCT`).
 8. **Risk limits:** `MAX_OPEN_POSITIONS`, `MIN_SOL_RESERVE`, and `DAILY_LOSS_LIMIT_SOL`, which stops new buys
    for the rest of the UTC day once that much has been lost.
 

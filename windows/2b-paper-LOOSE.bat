@@ -7,6 +7,7 @@ set MODE=paper
 set STATE_FILE=state-loose.json
 set TRADES_CSV=trades-loose.csv
 set LOG_FILE=bot-loose.log
+set WINNERS_FILE=winners-loose.txt
 rem Looser entry filters (same as the cloud test)
 set MIN_LIQUIDITY_USD=10000
 set MIN_MARKET_CAP_USD=20000

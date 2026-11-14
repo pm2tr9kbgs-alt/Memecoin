@@ -95,6 +95,8 @@ class Config:
     add_trigger_pct: float = 50.0
     add_amount_sol: float = 0.025
     max_adds: int = 2
+    winner_alert_pct: float = 25.0  # announce a position each time it gains another this-many % (0 = off)
+    winners_file: str = "winners.txt"
 
     # --- loop & storage ---
     scan_interval_sec: float = 20.0
@@ -169,6 +171,8 @@ class Config:
             add_trigger_pct=_float("ADD_TRIGGER_PCT", d.add_trigger_pct),
             add_amount_sol=_float("ADD_AMOUNT_SOL", d.add_amount_sol),
             max_adds=_int("MAX_ADDS", d.max_adds),
+            winner_alert_pct=_float("WINNER_ALERT_PCT", d.winner_alert_pct),
+            winners_file=_env("WINNERS_FILE", d.winners_file),
             scan_interval_sec=_float("SCAN_INTERVAL_SEC", d.scan_interval_sec),
             monitor_interval_sec=_float("MONITOR_INTERVAL_SEC", d.monitor_interval_sec),
             state_file=_env("STATE_FILE", d.state_file),

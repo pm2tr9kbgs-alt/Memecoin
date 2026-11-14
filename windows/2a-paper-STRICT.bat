@@ -7,6 +7,7 @@ set MODE=paper
 set STATE_FILE=state-strict.json
 set TRADES_CSV=trades-strict.csv
 set LOG_FILE=bot-strict.log
+set WINNERS_FILE=winners-strict.txt
 echo ==================================================
 echo   STRICT BOT  -  paper trading  -  default filters
 echo   trades saved to trades-strict.csv

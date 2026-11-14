@@ -7,6 +7,7 @@ set MODE=paper
 set STATE_FILE=state-hype.json
 set TRADES_CSV=trades-hype.csv
 set LOG_FILE=bot-hype.log
+set WINNERS_FILE=winners-hype.txt
 rem Loose filters, but only tokens with a hype score of 25-60 (moderate attention; extreme hype is skipped as a likely pump)
 set MIN_HYPE_SCORE=25
 set MIN_LIQUIDITY_USD=10000

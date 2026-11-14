@@ -13,3 +13,4 @@ snapshots.csv
 state*.json
 trades*.csv
 bot*.log
+winners*.txt

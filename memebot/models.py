@@ -112,6 +112,7 @@ class Position:
     sell_failures: int = 0
     adds: int = 0  # times we added to this position (pyramiding)
     last_buy_price: float = 0.0  # lamports per raw token at the most recent buy/add
+    winner_alerted_pct: float = 0.0  # highest winner-alert level already announced
 
     def pnl_pct(self, value_lamports: int) -> float:
         if self.entry_lamports <= 0:

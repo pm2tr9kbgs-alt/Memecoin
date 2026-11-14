@@ -231,6 +231,7 @@ class Bot:
             except (httpx.HTTPError, ValueError) as exc:
                 log.warning("%s: quote failed: %s", pos.symbol, exc)
                 continue
+            self._winner_alert(pos, value)
             reason = exit_reason(pos, value, now, self.cfg)
             log.debug("%s value %s (%+.1f%%, peak %+.1f%%)", pos.symbol, sol(value), pos.pnl_pct(value),
                       pos.pnl_pct(pos.peak_value_lamports))
@@ -242,6 +243,24 @@ class Bot:
         if self.state.positions:
             self._persist()
         return sold
+
+    def _winner_alert(self, pos: Position, value: int) -> None:
+        """Announce a position each time it crosses another WINNER_ALERT_PCT step (+25%, +50%, ...)."""
+        step = self.cfg.winner_alert_pct
+        pnl = pos.pnl_pct(value)
+        if step <= 0 or pnl < step:
+            return
+        level = (pnl // step) * step
+        if level <= pos.winner_alerted_pct:
+            return
+        pos.winner_alerted_pct = level
+        link = f"https://dexscreener.com/solana/{pos.mint}"
+        log.warning("WINNER %s %+.1f%% (%s, worth %s) address %s %s",
+                    pos.symbol, pnl, f"crossed +{level:.0f}%", sol(value), pos.mint, link)
+        if self.cfg.winners_file:
+            stamp = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+            with open(self.cfg.winners_file, "a", encoding="utf-8") as fh:
+                fh.write(f"{stamp} UTC  {pos.symbol}  {pnl:+.1f}%  {pos.mint}  {link}\n")
 
     async def _maybe_add(self, pos: Position, value: int, now: float) -> bool:
         """Pyramiding: add to a winner each time it rises add_trigger_pct above the last buy price."""
