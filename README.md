@@ -40,7 +40,7 @@ Jupiter, and sells on take-profit, stop-loss, trailing stop or a time limit.
    separately from scanning, so a slow safety check or RPC retry never leaves open trades unwatched. By default it
    sells whatever it still holds once the price falls a set amount below its highest point. How much depends on the
    best gain so far:
-   - below +25%: 20% below the high (`TRAILING_STOP_PCT`), the same as a −20% stop-loss before any gain
+   - below +25%: 15% below the high (`TRAILING_STOP_PCT`), the same as a −15% stop-loss before any gain
    - from +25% to +100%: 10% below the high, to keep more of the gain (`TIGHT_TRAIL_AFTER_PCT`, `TIGHT_TRAILING_STOP_PCT`)
    - from +100% up: 20% below the high again, so big runners have room to swing (`RUNNER_TRAIL_AFTER_PCT`,
      `RUNNER_TRAILING_STOP_PCT`)
