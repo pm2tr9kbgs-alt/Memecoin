@@ -289,7 +289,8 @@ async def test_small_moves_bought_immediately(tmp_path):
 
 async def test_pyramiding_adds_to_winners_up_to_limit(tmp_path):
     bot, jup = make_bot(tmp_path, [good_candidate("A")], take_profit_pct=0, trailing_activation_pct=0,
-                        trailing_stop_pct=20, stale_after_minutes=0, add_trigger_pct=30, add_amount_sol=0.025, max_adds=2)
+                        trailing_stop_pct=20, stale_after_minutes=0, add_trigger_pct=30, add_amount_sol=0.025, max_adds=2,
+                        partial_take_profit_pct=0)
     await bot.scan_once(NOW)
     pos = bot.state.positions["A"]
     first_cost, first_tokens = pos.entry_lamports, pos.token_amount
@@ -317,22 +318,6 @@ async def test_pyramiding_adds_to_winners_up_to_limit(tmp_path):
     assert csv_text.count(",add,") == 2 and "trailing_stop" in csv_text
 
 
-def test_hype_score():
-    from memebot.strategy import hype_score
-
-    quiet = good_candidate(buys_m5=6, sells_m5=1, buys_h1=6, volume_m5_usd=500, volume_h1_usd=500)
-    hyped = good_candidate(buys_m5=150, sells_m5=50, buys_h1=300, volume_m5_usd=40_000, volume_h1_usd=120_000,
-                           has_twitter=True, has_telegram=True, has_website=True, boosts_active=100)
-    fading = good_candidate(buys_m5=40, sells_m5=60, buys_h1=1200, volume_m5_usd=10_000, volume_h1_usd=300_000,
-                            has_twitter=True)
-    assert hype_score(hyped) > 85
-    assert hype_score(quiet) < 15
-    assert hype_score(fading) < 20
-    c = cfg(min_hype_score=50, max_hype_score=0)  # ceiling off: only test the minimum here
-    assert screen_rejections(hyped, c, NOW * 1000) == []
-    assert any("hype" in r for r in screen_rejections(fading, c, NOW * 1000))
-
-
 def test_wait_out_post_graduation_selling():
     c = cfg(graduation_wait_minutes=20, min_pair_age_minutes=5)
     just_graduated = good_candidate(mint="Abcpump", dex_id="pumpswap", pair_created_at_ms=int((NOW - 8 * 60) * 1000))
@@ -343,12 +328,10 @@ def test_wait_out_post_graduation_selling():
     assert not any("graduated" in r for r in screen_rejections(not_launchpad, c, NOW * 1000))
 
 
-def test_extreme_hype_and_lopsided_buying_rejected():
-    c = cfg(max_hype_score=60, max_buy_sell_ratio_m5=3.5)
-    pumped = good_candidate(buys_m5=150, sells_m5=30, buys_h1=300, volume_m5_usd=40_000, volume_h1_usd=120_000,
-                            has_twitter=True, has_telegram=True, has_website=True, boosts_active=100)
-    reasons = screen_rejections(pumped, c, NOW * 1000)
-    assert any("coordinated pump" in r for r in reasons) and any("too high" in r for r in reasons)
+def test_lopsided_buying_rejected():
+    c = cfg(max_buy_sell_ratio_m5=3.5)
+    pumped = good_candidate(buys_m5=150, sells_m5=30)
+    assert any("coordinated pump" in r for r in screen_rejections(pumped, c, NOW * 1000))
     assert screen_rejections(good_candidate(), c, NOW * 1000) == []
 
 
@@ -392,3 +375,55 @@ async def test_already_pumped_tokens_skipped_after_h1_cools(tmp_path):
 
 def test_adds_off_by_default():
     assert Config().max_adds == 0
+
+
+async def test_partial_take_profit_locks_half_and_lets_rest_run(tmp_path):
+    bot, jup = make_bot(tmp_path, [good_candidate("A")], partial_take_profit_pct=25, partial_take_profit_fraction=0.5,
+                        trailing_stop_pct=20, tight_trail_after_pct=0, stale_after_minutes=0, winner_alert_pct=0)
+    await bot.scan_once(NOW)
+    pos = bot.state.positions["A"]
+    tokens, cost = pos.token_amount, pos.entry_lamports
+    jup.sell_rate["A"] = 1.4  # +40%
+    assert await bot.monitor_once(NOW + 60) == []
+    assert pos.partial_taken and pos.token_amount == tokens - tokens // 2
+    assert pos.realized_lamports > 0 and bot.state.realized_today() == pos.realized_lamports
+    assert abs(pos.entry_lamports - cost / 2) <= 1
+    assert abs(pos.pnl_pct(pos.last_value_lamports) - 40) < 1  # remaining half still shows the same gain
+    jup.sell_rate["A"] = 1.6  # keeps running; no second partial sell
+    assert await bot.monitor_once(NOW + 120) == [] and pos.token_amount == tokens - tokens // 2
+    jup.sell_rate["A"] = 1.2  # -25% from the peak: trailing stop sells the rest
+    assert await bot.monitor_once(NOW + 180) == ["A"]
+    assert bot.state.loss_streak == 0
+    rows = (tmp_path / "trades.csv").read_text().splitlines()
+    assert [r.split(",")[2] for r in rows[1:]] == ["buy", "partial", "sell"]
+
+
+async def test_losing_streak_pauses_buying(tmp_path):
+    cands = [good_candidate(m) for m in ("A", "B", "C", "D")]
+    bot, jup = make_bot(tmp_path, cands, max_open_positions=1, loss_streak_limit=3, loss_pause_minutes=45,
+                        partial_take_profit_pct=0, stop_loss_pct=20, daily_loss_limit_sol=100)
+    t = NOW
+    for m in ("A", "B", "C"):
+        assert await bot.scan_once(t) == [m]
+        jup.sell_rate[m] = 0.7  # -30%: stop-loss
+        assert await bot.monitor_once(t + 10) == [m]
+        t += 60
+    assert bot.paused(t)
+    assert await bot.scan_once(t) == []  # paused after 3 losses in a row
+    assert await bot.scan_once(t + 46 * 60) == ["D"]  # pause over
+    bot.state.save()
+    assert BotState.load(bot.state.path).loss_streak == 0
+
+
+def test_rug_checks_lp_lock_and_creator_balance():
+    from memebot.safety import rugcheck_lp_and_creator
+
+    rc = {"totalMarketLiquidity": 50_000, "markets": [{"lp": {"lpLockedUSD": 20_000}}, {"lp": {"lpLockedUSD": 0}}],
+          "token": {"supply": 1_000_000}, "creatorBalance": 80_000}
+    lp, creator = rugcheck_lp_and_creator(rc)
+    assert lp == 40 and creator == 8
+    c = cfg(use_rugcheck=True, max_rugcheck_score=100, min_lp_locked_pct=90, max_creator_pct=5)
+    reasons = safety_rejections(SafetyReport(mint="X", lp_locked_pct=lp, creator_pct=creator), c)
+    assert any("liquidity locked" in r for r in reasons) and any("creator" in r for r in reasons)
+    assert safety_rejections(SafetyReport(mint="X", lp_locked_pct=100, creator_pct=0), c) == []
+    assert rugcheck_lp_and_creator({}) == (None, None)  # missing data doesn't block

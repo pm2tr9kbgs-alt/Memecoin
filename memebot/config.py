@@ -68,8 +68,6 @@ class Config:
     pumped_h1_pct: float = 150.0
     pumped_memory_minutes: float = 120.0
     graduation_wait_minutes: float = 10.0  # skip launchpad tokens that moved to a DEX pool less than this ago
-    min_hype_score: float = 0.0  # 0-100 from activity acceleration, socials and boosts (0 = off)
-    max_hype_score: float = 60.0  # extreme hype was mostly coordinated pump-and-dumps in testing (0 = off)
     max_buy_sell_ratio_m5: float = 3.5  # very lopsided buying is usually bots pumping before a dump (0 = off)
     # buy-the-dip: tokens up >= dip_trigger_pct in 5m go on a watchlist and are bought only after
     # pulling back dip_pct from their high; a drop beyond max_dip_pct means dumping -> skip. 0 = off
@@ -83,6 +81,8 @@ class Config:
     require_freeze_authority_revoked: bool = True
     max_top10_holders_pct: float = 30.0  # of supply, wallet holders only (pools excluded)
     max_single_holder_pct: float = 10.0
+    min_lp_locked_pct: float = 90.0  # share of pool liquidity that must be locked/burned, so the dev can't pull it (0 = off)
+    max_creator_pct: float = 5.0  # skip if the creator's wallet still holds more than this share of supply (0 = off)
     use_rugcheck: bool = True
     max_rugcheck_score: float = 50.0  # normalised 0-100, lower is safer
     rugcheck_required: bool = False  # if True, a failed RugCheck lookup blocks the buy
@@ -97,6 +97,13 @@ class Config:
     max_hold_minutes: float = 0.0  # 0 = no time limit
     stale_after_minutes: float = 30.0  # sell positions that haven't made STALE_MIN_PROFIT_PCT by then (0 = off)
     stale_min_profit_pct: float = 5.0
+    # partial take-profit: sell this fraction of a position once it is up partial_take_profit_pct (0 = off);
+    # the rest keeps running under the trailing stop
+    partial_take_profit_pct: float = 25.0
+    partial_take_profit_fraction: float = 0.5
+    # losing-streak pause: after this many losing trades in a row, stop buying for loss_pause_minutes (0 = off)
+    loss_streak_limit: int = 3
+    loss_pause_minutes: float = 45.0
     # pyramiding: add add_amount_sol each time the price rises add_trigger_pct above the last buy (0 = off)
     add_trigger_pct: float = 50.0
     add_amount_sol: float = 0.025
@@ -155,8 +162,6 @@ class Config:
             pumped_h1_pct=_float("PUMPED_H1_PCT", d.pumped_h1_pct),
             pumped_memory_minutes=_float("PUMPED_MEMORY_MINUTES", d.pumped_memory_minutes),
             graduation_wait_minutes=_float("GRADUATION_WAIT_MINUTES", d.graduation_wait_minutes),
-            min_hype_score=_float("MIN_HYPE_SCORE", d.min_hype_score),
-            max_hype_score=_float("MAX_HYPE_SCORE", d.max_hype_score),
             max_buy_sell_ratio_m5=_float("MAX_BUY_SELL_RATIO_M5", d.max_buy_sell_ratio_m5),
             dip_trigger_pct=_float("DIP_TRIGGER_PCT", d.dip_trigger_pct),
             dip_pct=_float("DIP_PCT", d.dip_pct),
@@ -166,6 +171,8 @@ class Config:
             require_freeze_authority_revoked=_bool("REQUIRE_FREEZE_AUTHORITY_REVOKED", d.require_freeze_authority_revoked),
             max_top10_holders_pct=_float("MAX_TOP10_HOLDERS_PCT", d.max_top10_holders_pct),
             max_single_holder_pct=_float("MAX_SINGLE_HOLDER_PCT", d.max_single_holder_pct),
+            min_lp_locked_pct=_float("MIN_LP_LOCKED_PCT", d.min_lp_locked_pct),
+            max_creator_pct=_float("MAX_CREATOR_PCT", d.max_creator_pct),
             use_rugcheck=_bool("USE_RUGCHECK", d.use_rugcheck),
             max_rugcheck_score=_float("MAX_RUGCHECK_SCORE", d.max_rugcheck_score),
             rugcheck_required=_bool("RUGCHECK_REQUIRED", d.rugcheck_required),
@@ -178,6 +185,10 @@ class Config:
             max_hold_minutes=_float("MAX_HOLD_MINUTES", d.max_hold_minutes),
             stale_after_minutes=_float("STALE_AFTER_MINUTES", d.stale_after_minutes),
             stale_min_profit_pct=_float("STALE_MIN_PROFIT_PCT", d.stale_min_profit_pct),
+            partial_take_profit_pct=_float("PARTIAL_TAKE_PROFIT_PCT", d.partial_take_profit_pct),
+            partial_take_profit_fraction=_float("PARTIAL_TAKE_PROFIT_FRACTION", d.partial_take_profit_fraction),
+            loss_streak_limit=_int("LOSS_STREAK_LIMIT", d.loss_streak_limit),
+            loss_pause_minutes=_float("LOSS_PAUSE_MINUTES", d.loss_pause_minutes),
             add_trigger_pct=_float("ADD_TRIGGER_PCT", d.add_trigger_pct),
             add_amount_sol=_float("ADD_AMOUNT_SOL", d.add_amount_sol),
             max_adds=_int("MAX_ADDS", d.max_adds),

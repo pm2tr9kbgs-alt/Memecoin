@@ -31,12 +31,6 @@ class TokenCandidate:
     price_change_m5_pct: float
     price_change_h1_pct: float
     pair_created_at_ms: int | None
-    buys_h1: int = 0
-    sells_h1: int = 0
-    has_twitter: bool = False
-    has_telegram: bool = False
-    has_website: bool = False
-    boosts_active: int = 0
 
     @classmethod
     def from_pair(cls, pair: dict) -> "TokenCandidate":
@@ -45,9 +39,6 @@ class TokenCandidate:
         volume = pair.get("volume") or {}
         change = pair.get("priceChange") or {}
         created = pair.get("pairCreatedAt")
-        txns_h1 = (pair.get("txns") or {}).get("h1") or {}
-        info = pair.get("info") or {}
-        social_types = {str(x.get("type", "")).lower() for x in info.get("socials") or []}
         return cls(
             mint=base.get("address", ""),
             symbol=base.get("symbol", "?"),
@@ -64,12 +55,6 @@ class TokenCandidate:
             price_change_m5_pct=_num(change.get("m5")),
             price_change_h1_pct=_num(change.get("h1")),
             pair_created_at_ms=int(created) if created else None,
-            buys_h1=int(_num(txns_h1.get("buys"))),
-            sells_h1=int(_num(txns_h1.get("sells"))),
-            has_twitter=bool(social_types & {"twitter", "x"}),
-            has_telegram="telegram" in social_types,
-            has_website=bool(info.get("websites")),
-            boosts_active=int(_num((pair.get("boosts") or {}).get("active"))),
         )
 
     def age_minutes(self, now_ms: float | None = None) -> float | None:
@@ -94,6 +79,8 @@ class SafetyReport:
     top_holder_pct: float = 0.0
     rugcheck_score: float | None = None
     rugcheck_dangers: list[str] = field(default_factory=list)
+    lp_locked_pct: float | None = None  # share of pool liquidity that is locked or burned (RugCheck)
+    creator_pct: float | None = None  # share of supply still in the creator's wallet (RugCheck)
     errors: list[str] = field(default_factory=list)
 
 
@@ -113,6 +100,8 @@ class Position:
     adds: int = 0  # times we added to this position (pyramiding)
     last_buy_price: float = 0.0  # lamports per raw token at the most recent buy/add
     winner_alerted_pct: float = 0.0  # highest winner-alert level already announced
+    partial_taken: bool = False  # already sold part of the position at the partial take-profit
+    realized_lamports: int = 0  # profit already locked in by partial sells
 
     def pnl_pct(self, value_lamports: int) -> float:
         if self.entry_lamports <= 0:

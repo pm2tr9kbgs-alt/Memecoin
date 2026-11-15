@@ -16,7 +16,7 @@ from .models import Position, TokenCandidate
 from .rpc import RPCError
 from .safety import SafetyChecker, safety_rejections
 from .state import BotState, log_trade
-from .strategy import exit_reason, hype_score, momentum_score, screen_rejections
+from .strategy import exit_reason, momentum_score, screen_rejections
 
 log = logging.getLogger("memebot")
 
@@ -66,6 +66,10 @@ class Bot:
         last = self.state.traded_mints.get(mint)
         return last is None or now - last > REBUY_COOLDOWN_SEC
 
+    def paused(self, now: float) -> bool:
+        """True while the losing-streak pause is on (no new buys)."""
+        return now < self.state.paused_until
+
     def _pump_rejections(self, c: TokenCandidate, now: float) -> list[str]:
         """Remember tokens that pumped hard; skip them for a while even after the 1h change cools off."""
         cfg = self.cfg
@@ -91,6 +95,8 @@ class Bot:
                 self._halt_logged = True
             return []
         self._halt_logged = False
+        if self.paused(now):
+            return []
 
         mints = [m for m in await self.dex.latest_token_addresses() if self._eligible(m, now)]
         if not mints:
@@ -157,9 +163,9 @@ class Bot:
 
     async def _execute_buy(self, c: TokenCandidate, quote: dict, now: float, note: str = "") -> bool:
         cfg = self.cfg
-        log.info("BUY %s (%s) %s | liq $%s mcap $%s 5m %+.1f%% b/s %.2f hype %.0f", c.symbol, c.mint,
+        log.info("BUY %s (%s) %s | liq $%s mcap $%s 5m %+.1f%% b/s %.2f", c.symbol, c.mint,
                  sol(cfg.buy_amount_lamports), f"{c.liquidity_usd:,.0f}", f"{c.market_cap_usd:,.0f}",
-                 c.price_change_m5_pct, c.buy_sell_ratio_m5, hype_score(c))
+                 c.price_change_m5_pct, c.buy_sell_ratio_m5)
         if note:
             log.info("    %s", note)
         try:
@@ -215,7 +221,7 @@ class Bot:
                 continue
             if dip < cfg.dip_pct:
                 continue
-            if len(self.state.positions) >= cfg.max_open_positions or self.daily_limit_hit():
+            if len(self.state.positions) >= cfg.max_open_positions or self.daily_limit_hit() or self.paused(now):
                 continue  # keep watching until a slot frees up
             if price_impact_pct(quote) > cfg.max_price_impact_pct:
                 continue
@@ -237,7 +243,7 @@ class Bot:
             except NoRouteError:
                 pos.no_route_count += 1
                 log.warning("%s: no sell route (%d in a row)", pos.symbol, pos.no_route_count)
-                if pos.no_route_count >= NO_ROUTE_SELL_AFTER and await self.close(pos, "no_route"):
+                if pos.no_route_count >= NO_ROUTE_SELL_AFTER and await self.close(pos, "no_route", now):
                     sold.append(mint)
                 continue
             except (httpx.HTTPError, ValueError) as exc:
@@ -248,9 +254,9 @@ class Bot:
             log.debug("%s value %s (%+.1f%%, peak %+.1f%%)", pos.symbol, sol(value), pos.pnl_pct(value),
                       pos.pnl_pct(pos.peak_value_lamports))
             if reason:
-                if await self.close(pos, reason):
+                if await self.close(pos, reason, now):
                     sold.append(mint)
-            else:
+            elif not await self._maybe_take_partial(pos, value):
                 await self._maybe_add(pos, value, now)
         if self.state.positions:
             self._persist()
@@ -314,7 +320,46 @@ class Bot:
         log.info("added to %s: now %s invested, %d tokens", pos.symbol, sol(pos.entry_lamports), pos.token_amount)
         return True
 
-    async def close(self, pos: Position, reason: str) -> bool:
+    async def _maybe_take_partial(self, pos: Position, value: int) -> bool:
+        """Once up partial_take_profit_pct, sell part of the position to lock in profit; the rest keeps running."""
+        cfg = self.cfg
+        if pos.partial_taken or cfg.partial_take_profit_pct <= 0 or not 0 < cfg.partial_take_profit_fraction < 1:
+            return False
+        pnl_pct = pos.pnl_pct(value)
+        if pnl_pct < cfg.partial_take_profit_pct:
+            return False
+        amount = int(pos.token_amount * cfg.partial_take_profit_fraction)
+        if amount <= 0:
+            return False
+        log.info("TAKE PROFIT %s: up %+.1f%%, selling %.0f%% and letting the rest run",
+                 pos.symbol, pnl_pct, cfg.partial_take_profit_fraction * 100)
+        try:
+            res = await self.ex.sell(pos.mint, amount)
+        except (TxFailed, RPCError, httpx.HTTPError, NoRouteError) as exc:
+            log.error("partial sell %s failed: %s", pos.symbol, exc)
+            pos.partial_taken = True  # don't retry every tick; the trailing stop still protects the gain
+            return False
+        old_tokens = pos.token_amount
+        cost = int(pos.entry_lamports * res.token_amount / old_tokens)  # cost basis of the part sold
+        pnl = res.lamports - cost
+        pos.token_amount -= res.token_amount
+        pos.entry_lamports -= cost
+        keep = pos.token_amount / old_tokens
+        pos.peak_value_lamports = int(pos.peak_value_lamports * keep)
+        pos.last_value_lamports = int(value * keep)
+        pos.realized_lamports += pnl
+        pos.partial_taken = True
+        self.state.record_realized(pnl)
+        log_trade(cfg.trades_csv, cfg.mode, "partial", pos, res.lamports, res.token_amount, res.signature,
+                  "partial_take_profit", pnl)
+        if pos.token_amount <= 0:
+            self.state.positions.pop(pos.mint, None)
+        self._persist()
+        log.info("sold part of %s for %s, P&L %s locked in", pos.symbol, sol(res.lamports), sol(pnl))
+        return True
+
+    async def close(self, pos: Position, reason: str, now: float | None = None) -> bool:
+        now = now if now is not None else time.time()
         log.info("SELL %s (%s) reason=%s est %+.1f%%", pos.symbol, pos.mint, reason, pos.pnl_pct(pos.last_value_lamports))
         try:
             res = await self.ex.sell(pos.mint, pos.token_amount)
@@ -326,10 +371,26 @@ class Bot:
         self.state.record_realized(pnl)
         self.state.positions.pop(pos.mint, None)
         log_trade(self.cfg.trades_csv, self.cfg.mode, "sell", pos, res.lamports, res.token_amount, res.signature, reason, pnl)
+        self._track_streak(pnl + pos.realized_lamports, now)
         self._persist()
         log.info("sold %s for %s, P&L %s (%+.1f%%) | today %s", pos.symbol, sol(res.lamports), sol(pnl),
                  pnl / pos.entry_lamports * 100, sol(self.state.realized_today()))
         return True
+
+    def _track_streak(self, trade_pnl: int, now: float) -> None:
+        """Count losing trades in a row; after loss_streak_limit, pause new buys for loss_pause_minutes."""
+        cfg = self.cfg
+        if cfg.loss_streak_limit <= 0:
+            return
+        if trade_pnl >= 0:
+            self.state.loss_streak = 0
+            return
+        self.state.loss_streak += 1
+        if self.state.loss_streak >= cfg.loss_streak_limit:
+            self.state.paused_until = now + cfg.loss_pause_minutes * 60
+            self.state.loss_streak = 0
+            log.warning("PAUSE: %d losing trades in a row; no new buys for %.0f minutes (open positions still managed)",
+                        cfg.loss_streak_limit, cfg.loss_pause_minutes)
 
     async def sell_all(self, reason: str = "manual") -> None:
         for pos in list(self.state.positions.values()):

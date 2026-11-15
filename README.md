@@ -11,11 +11,8 @@ Jupiter, and sells on take-profit, stop-loss, trailing stop or a time limit.
 
 1. **Discover.** Every `SCAN_INTERVAL_SEC` it pulls the latest token profiles and boosts from the DexScreener API
    and looks up each token's most liquid Solana pair.
-2. **Hype score (optional, `MIN_HYPE_SCORE`).** A 0–100 score from free DexScreener data: buys and volume in the
-   last 5 minutes compared with the hour's average (is attention speeding up right now?), buy/sell dominance,
-   linked X / Telegram / website, and paid DexScreener boosts. **Very high hype is treated as a warning:** in testing,
-   every trade with a score above 60 was a pump-and-dump, so tokens above `MAX_HYPE_SCORE` (60) are skipped, and so
-   are tokens with more than 3.5 buys per sell in 5 minutes (`MAX_BUY_SELL_RATIO_M5`).
+2. **Coordinated-pump filter.** Tokens with more than 3.5 buys per sell in 5 minutes are skipped: that is usually
+   bots pumping before a dump, not real demand (`MAX_BUY_SELL_RATIO_M5`).
 3. **Momentum filters.** These check liquidity, market cap, pair age, 5-minute volume and transaction count,
    the buy/sell ratio, and the 5-minute price change. That change has a ceiling so the bot doesn't buy the top of a vertical candle.
    **Graduation:** a pump.fun or bonk token that moved to a real DEX less than 10 minutes ago is skipped, because
@@ -28,6 +25,9 @@ Jupiter, and sells on take-profit, stop-loss, trailing stop or a time limit.
    - limits on how much the top 10 wallets and the single largest wallet hold. Pools and bonding curves are
      program-derived (off-curve) addresses and are left out of this count.
    - RugCheck "danger" risks and its normalised score
+   - **liquidity lock:** at least 90% of the pool's liquidity must be locked or burned, so the developer can't pull it
+     (`MIN_LP_LOCKED_PCT`)
+   - **creator wallet:** skipped if the creator still holds more than 5% of the supply (`MAX_CREATOR_PCT`)
    - **round-trip quote:** it quotes buying, then quotes selling those tokens back. A large loss means a sell tax or honeypot.
    - a cap on price impact
 5. **Wait for a dip after a spike.** A token already up 15%+ in 5 minutes isn't bought straight away: it goes on a
@@ -43,6 +43,9 @@ Jupiter, and sells on take-profit, stop-loss, trailing stop or a time limit.
    to cap gains, `TRAILING_ACTIVATION_PCT` to start trailing only after a gain, `MAX_HOLD_MINUTES` for a time limit.
    Positions that aren't at least +5% up after 30 minutes are sold to free the slot
    (`STALE_AFTER_MINUTES`, `STALE_MIN_PROFIT_PCT`).
+   **Partial take-profit:** at +25% it sells half the position to lock in profit, and the other half keeps running
+   under the trailing stop (`PARTIAL_TAKE_PROFIT_PCT`, `PARTIAL_TAKE_PROFIT_FRACTION`; these sales show as `partial`
+   in `trades.csv`).
    **Adding to winners (off by default):** with `MAX_ADDS` above 0, each time a position rises +50% above its last buy,
    it adds 0.025 SOL (`ADD_TRIGGER_PCT`, `ADD_AMOUNT_SOL`). In testing, both adds landed at the top and roughly halved
    the profit, so it is turned off.
@@ -50,6 +53,8 @@ Jupiter, and sells on take-profit, stop-loss, trailing stop or a time limit.
    token address and DexScreener link and appends it to `winners.txt` (`WINNER_ALERT_PCT`).
 8. **Risk limits:** `MAX_OPEN_POSITIONS`, `MIN_SOL_RESERVE`, and `DAILY_LOSS_LIMIT_SOL`, which stops new buys
    for the rest of the UTC day once that much has been lost.
+   **Losing-streak pause:** after 3 losing trades in a row, it stops buying for 45 minutes. Open positions are still
+   managed during the pause (`LOSS_STREAK_LIMIT`, `LOSS_PAUSE_MINUTES`).
 
 State (open positions, daily P&L, blacklist) is kept in `state.json`, so a restart picks up where it left off.
 Every fill is appended to `trades.csv`, and logs go to `bot.log`.
@@ -62,9 +67,8 @@ Every fill is appended to `trades.csv`, and logs go to `bot.log`.
    - `1-setup.bat`: installs everything and creates `.env`
    - `2a-paper-STRICT.bat` (blue window): paper trading with the default filters → `trades-strict.csv`
    - `2b-paper-LOOSE.bat` (yellow window): paper trading with looser filters → `trades-loose.csv`
-   - `2c-paper-HYPE.bat` (purple window): loose filters, but only tokens with a **hype score** of 25–60 → `trades-hype.csv`
      (run them at once to compare; each has its own balance and files)
-   - `3a-status-STRICT.bat` / `3b-status-LOOSE.bat` / `3c-status-HYPE.bat`: balance and open positions for each
+   - `3a-status-STRICT.bat` / `3b-status-LOOSE.bat`: balance and open positions for each
    - `4-live-trading.bat`: real trading (needs `PRIVATE_KEY` and `MODE=live` in `.env`)
    - `5-sell-everything.bat`: emergency exit
 4. Edit settings with Notepad: right-click `.env` → Open with → Notepad.
