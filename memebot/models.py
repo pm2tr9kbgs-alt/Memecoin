@@ -100,7 +100,8 @@ class Position:
     adds: int = 0  # times we added to this position (pyramiding)
     last_buy_price: float = 0.0  # lamports per raw token at the most recent buy/add
     winner_alerted_pct: float = 0.0  # highest winner-alert level already announced
-    partial_taken: bool = False  # already sold part of the position at the partial take-profit
+    partial_steps: int = 0  # take-profit ladder levels already sold
+    original_tokens: int = 0  # tokens held before any ladder sells (ladder sizes are based on this)
     realized_lamports: int = 0  # profit already locked in by partial sells
 
     def pnl_pct(self, value_lamports: int) -> float:

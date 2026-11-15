@@ -290,7 +290,7 @@ async def test_small_moves_bought_immediately(tmp_path):
 async def test_pyramiding_adds_to_winners_up_to_limit(tmp_path):
     bot, jup = make_bot(tmp_path, [good_candidate("A")], take_profit_pct=0, trailing_activation_pct=0,
                         trailing_stop_pct=20, stale_after_minutes=0, add_trigger_pct=30, add_amount_sol=0.025, max_adds=2,
-                        partial_take_profit_pct=0)
+                        partial_take_profit_levels=())
     await bot.scan_once(NOW)
     pos = bot.state.positions["A"]
     first_cost, first_tokens = pos.entry_lamports, pos.token_amount
@@ -377,31 +377,46 @@ def test_adds_off_by_default():
     assert Config().max_adds == 0
 
 
-async def test_partial_take_profit_locks_half_and_lets_rest_run(tmp_path):
-    bot, jup = make_bot(tmp_path, [good_candidate("A")], partial_take_profit_pct=25, partial_take_profit_fraction=0.5,
-                        trailing_stop_pct=20, tight_trail_after_pct=0, stale_after_minutes=0, winner_alert_pct=0)
+async def test_take_profit_ladder_sells_quarters_and_keeps_last_quarter(tmp_path):
+    bot, jup = make_bot(tmp_path, [good_candidate("A")], partial_take_profit_levels=(25, 50, 100),
+                        partial_take_profit_fraction=0.25, trailing_stop_pct=20, tight_trail_after_pct=0,
+                        stale_after_minutes=0, winner_alert_pct=0)
     await bot.scan_once(NOW)
     pos = bot.state.positions["A"]
     tokens, cost = pos.token_amount, pos.entry_lamports
-    jup.sell_rate["A"] = 1.4  # +40%
-    assert await bot.monitor_once(NOW + 60) == []
-    assert pos.partial_taken and pos.token_amount == tokens - tokens // 2
-    assert pos.realized_lamports > 0 and bot.state.realized_today() == pos.realized_lamports
-    assert abs(pos.entry_lamports - cost / 2) <= 1
-    assert abs(pos.pnl_pct(pos.last_value_lamports) - 40) < 1  # remaining half still shows the same gain
-    jup.sell_rate["A"] = 1.6  # keeps running; no second partial sell
-    assert await bot.monitor_once(NOW + 120) == [] and pos.token_amount == tokens - tokens // 2
-    jup.sell_rate["A"] = 1.2  # -25% from the peak: trailing stop sells the rest
-    assert await bot.monitor_once(NOW + 180) == ["A"]
-    assert bot.state.loss_streak == 0
+    left = lambda: pos.token_amount / tokens  # noqa: E731
+
+    jup.sell_rate["A"] = 1.3  # +30%: first quarter
+    await bot.monitor_once(NOW + 60)
+    assert pos.partial_steps == 1 and abs(left() - 0.75) < 0.001
+    assert abs(pos.pnl_pct(pos.last_value_lamports) - 30) < 1  # remaining tokens still show the same gain
+    jup.sell_rate["A"] = 1.35  # no new level
+    await bot.monitor_once(NOW + 65)
+    assert pos.partial_steps == 1
+    jup.sell_rate["A"] = 2.2  # +120%: crosses +50% and +100% at once, sold together
+    await bot.monitor_once(NOW + 70)
+    assert pos.partial_steps == 3 and abs(left() - 0.25) < 0.001
+    assert abs(pos.entry_lamports - cost * 0.25) <= 2
+    jup.sell_rate["A"] = 3.0  # the last quarter keeps riding
+    assert await bot.monitor_once(NOW + 75) == [] and abs(left() - 0.25) < 0.001
+    jup.sell_rate["A"] = 2.35  # -21.7% from the high: trailing stop sells the rest
+    assert await bot.monitor_once(NOW + 80) == ["A"]
     rows = (tmp_path / "trades.csv").read_text().splitlines()
-    assert [r.split(",")[2] for r in rows[1:]] == ["buy", "partial", "sell"]
+    assert [r.split(",")[2] for r in rows[1:]] == ["buy", "partial", "partial", "sell"]
+    assert bot.state.realized_today() > 0 and bot.state.loss_streak == 0
+
+
+def test_ladder_levels_from_env(monkeypatch):
+    monkeypatch.setenv("PARTIAL_TAKE_PROFIT_LEVELS", "100, 25,50")
+    assert Config.from_env(env_file=None, mode="paper").partial_take_profit_levels == (25, 50, 100)
+    monkeypatch.setenv("PARTIAL_TAKE_PROFIT_LEVELS", "0")
+    assert Config.from_env(env_file=None, mode="paper").partial_take_profit_levels == ()
 
 
 async def test_losing_streak_pauses_buying(tmp_path):
     cands = [good_candidate(m) for m in ("A", "B", "C", "D")]
     bot, jup = make_bot(tmp_path, cands, max_open_positions=1, loss_streak_limit=3, loss_pause_minutes=45,
-                        partial_take_profit_pct=0, stop_loss_pct=20, daily_loss_limit_sol=100)
+                        partial_take_profit_levels=(), stop_loss_pct=20, daily_loss_limit_sol=100)
     t = NOW
     for m in ("A", "B", "C"):
         assert await bot.scan_once(t) == [m]
@@ -455,7 +470,7 @@ async def test_price_checks_continue_while_scan_is_stuck(tmp_path):
     import asyncio
 
     bot, jup = make_bot(tmp_path, [good_candidate("A")], monitor_interval_sec=0.01, scan_interval_sec=0.01,
-                        stop_loss_pct=20, partial_take_profit_pct=0)
+                        stop_loss_pct=20, partial_take_profit_levels=())
     await bot.scan_once(NOW)
     assert "A" in bot.state.positions
 

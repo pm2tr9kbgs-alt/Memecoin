@@ -29,6 +29,12 @@ def _bool(name: str, default: bool) -> bool:
     return _env(name, "true" if default else "false").lower() in {"1", "true", "yes", "on"}
 
 
+def _levels(name: str, default: tuple[float, ...]) -> tuple[float, ...]:
+    """Comma-separated gain levels, e.g. "25,50,100" (empty or 0 = off)."""
+    raw = _env(name, ",".join(f"{x:g}" for x in default))
+    return tuple(sorted(float(x) for x in raw.replace(";", ",").split(",") if x.strip() and float(x) > 0))
+
+
 @dataclass(frozen=True)
 class Config:
     # --- mode & connectivity ---
@@ -93,15 +99,15 @@ class Config:
     stop_loss_pct: float = 20.0
     trailing_activation_pct: float = 0.0  # 0 = trailing stop active from entry (stop follows the peak)
     trailing_stop_pct: float = 20.0  # sell when value falls this far below the peak
-    tight_trail_after_pct: float = 25.0  # once the peak gain reaches this... (0 = off)
+    tight_trail_after_pct: float = 0.0  # once the peak gain reaches this... (0 = off: same 20% trail throughout)
     tight_trailing_stop_pct: float = 10.0  # ...trail this close instead, to keep more of the gain
     max_hold_minutes: float = 0.0  # 0 = no time limit
     stale_after_minutes: float = 30.0  # sell positions that haven't made STALE_MIN_PROFIT_PCT by then (0 = off)
     stale_min_profit_pct: float = 5.0
-    # partial take-profit: sell this fraction of a position once it is up partial_take_profit_pct (0 = off);
-    # the rest keeps running under the trailing stop
-    partial_take_profit_pct: float = 25.0
-    partial_take_profit_fraction: float = 0.5
+    # take-profit ladder: at each gain level, sell partial_take_profit_fraction of the ORIGINAL position;
+    # whatever is left rides under the trailing stop. Default: 25% at +25%, +50% and +100%, keep the last 25%.
+    partial_take_profit_levels: tuple[float, ...] = (25.0, 50.0, 100.0)
+    partial_take_profit_fraction: float = 0.25
     # losing-streak pause: after this many losing trades in a row, stop buying for loss_pause_minutes (0 = off)
     loss_streak_limit: int = 3
     loss_pause_minutes: float = 45.0
@@ -195,7 +201,7 @@ class Config:
             max_hold_minutes=_float("MAX_HOLD_MINUTES", d.max_hold_minutes),
             stale_after_minutes=_float("STALE_AFTER_MINUTES", d.stale_after_minutes),
             stale_min_profit_pct=_float("STALE_MIN_PROFIT_PCT", d.stale_min_profit_pct),
-            partial_take_profit_pct=_float("PARTIAL_TAKE_PROFIT_PCT", d.partial_take_profit_pct),
+            partial_take_profit_levels=_levels("PARTIAL_TAKE_PROFIT_LEVELS", d.partial_take_profit_levels),
             partial_take_profit_fraction=_float("PARTIAL_TAKE_PROFIT_FRACTION", d.partial_take_profit_fraction),
             loss_streak_limit=_int("LOSS_STREAK_LIMIT", d.loss_streak_limit),
             loss_pause_minutes=_float("LOSS_PAUSE_MINUTES", d.loss_pause_minutes),

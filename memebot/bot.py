@@ -367,23 +367,30 @@ class Bot:
         return True
 
     async def _maybe_take_partial(self, pos: Position, value: int) -> bool:
-        """Once up partial_take_profit_pct, sell part of the position to lock in profit; the rest keeps running."""
+        """Take-profit ladder: at each level (default +25%, +50%, +100%) sell a fraction of the original position;
+        the rest keeps running under the trailing stop. Levels crossed at once are sold in one transaction."""
         cfg = self.cfg
-        if pos.partial_taken or cfg.partial_take_profit_pct <= 0 or not 0 < cfg.partial_take_profit_fraction < 1:
+        levels = cfg.partial_take_profit_levels
+        if not levels or not 0 < cfg.partial_take_profit_fraction <= 1 or pos.partial_steps >= len(levels):
             return False
         pnl_pct = pos.pnl_pct(value)
-        if pnl_pct < cfg.partial_take_profit_pct:
+        reached = sum(1 for lvl in levels if pnl_pct >= lvl)
+        if reached <= pos.partial_steps:
             return False
-        amount = int(pos.token_amount * cfg.partial_take_profit_fraction)
+        if not pos.original_tokens:
+            pos.original_tokens = pos.token_amount
+        steps = reached - pos.partial_steps
+        amount = min(int(pos.original_tokens * cfg.partial_take_profit_fraction * steps), pos.token_amount)
         if amount <= 0:
+            pos.partial_steps = reached
             return False
-        log.info("TAKE PROFIT %s: up %+.1f%%, selling %.0f%% and letting the rest run",
-                 pos.symbol, pnl_pct, cfg.partial_take_profit_fraction * 100)
+        log.info("TAKE PROFIT %s: up %+.1f%% (level +%.0f%%), selling %.0f%% of the original position",
+                 pos.symbol, pnl_pct, levels[reached - 1], cfg.partial_take_profit_fraction * steps * 100)
         try:
             res = await self.ex.sell(pos.mint, amount)
         except (TxFailed, RPCError, httpx.HTTPError, NoRouteError) as exc:
             log.error("partial sell %s failed: %s", pos.symbol, exc)
-            pos.partial_taken = True  # don't retry every tick; the trailing stop still protects the gain
+            pos.partial_steps = reached  # don't retry every tick; the trailing stop still protects the gain
             return False
         old_tokens = pos.token_amount
         cost = int(pos.entry_lamports * res.token_amount / old_tokens)  # cost basis of the part sold
@@ -394,14 +401,15 @@ class Bot:
         pos.peak_value_lamports = int(pos.peak_value_lamports * keep)
         pos.last_value_lamports = int(value * keep)
         pos.realized_lamports += pnl
-        pos.partial_taken = True
+        pos.partial_steps = reached
         self.state.record_realized(pnl)
         log_trade(cfg.trades_csv, cfg.mode, "partial", pos, res.lamports, res.token_amount, res.signature,
-                  "partial_take_profit", pnl)
+                  f"take_profit_{levels[reached - 1]:g}", pnl)
         if pos.token_amount <= 0:
             self.state.positions.pop(pos.mint, None)
         self._persist()
-        log.info("sold part of %s for %s, P&L %s locked in", pos.symbol, sol(res.lamports), sol(pnl))
+        log.info("sold part of %s for %s, P&L %s locked in (%d%% of the original position left)", pos.symbol,
+                 sol(res.lamports), sol(pnl), round(pos.token_amount / pos.original_tokens * 100))
         return True
 
     async def close(self, pos: Position, reason: str, now: float | None = None) -> bool:
