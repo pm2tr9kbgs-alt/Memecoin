@@ -461,19 +461,34 @@ class Bot:
     def stop(self) -> None:
         self._stop.set()
 
-    async def run(self) -> None:
-        next_scan = 0.0
+    async def _sleep(self, seconds: float) -> None:
+        try:
+            await asyncio.wait_for(self._stop.wait(), timeout=seconds)
+        except asyncio.TimeoutError:
+            pass
+
+    async def _price_loop(self) -> None:
+        """Check open positions every MONITOR_INTERVAL_SEC, independent of scanning, so slow safety checks
+        or RPC retries never leave open trades unwatched."""
         while not self._stop.is_set():
             try:
                 await self.monitor_once()
+            except Exception:  # keep watching; positions still need managing
+                log.exception("price check error")
+            await self._sleep(self.cfg.monitor_interval_sec)
+
+    async def _scan_loop(self) -> None:
+        next_scan = 0.0
+        while not self._stop.is_set():
+            try:
                 await self.watch_once()
                 if time.monotonic() >= next_scan:
                     next_scan = time.monotonic() + self.cfg.scan_interval_sec
                     await self.scan_once()
-            except Exception:  # keep the bot alive; positions still need managing
-                log.exception("loop error")
-            try:
-                await asyncio.wait_for(self._stop.wait(), timeout=self.cfg.monitor_interval_sec)
-            except asyncio.TimeoutError:
-                pass
+            except Exception:
+                log.exception("scan error")
+            await self._sleep(self.cfg.monitor_interval_sec)
+
+    async def run(self) -> None:
+        await asyncio.gather(self._price_loop(), self._scan_loop())
         self._persist()

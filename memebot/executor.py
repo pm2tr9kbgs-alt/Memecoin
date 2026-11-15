@@ -39,6 +39,8 @@ class LiveExecutor:
         self.jup = jupiter
         self.kp = keypair
         self.pubkey = str(keypair.pubkey())
+        # buys and sells measure balance changes, so they must not overlap (price checks and scanning run concurrently)
+        self._trade_lock = asyncio.Lock()
 
     async def sol_balance(self) -> int:
         return await self.rpc.get_balance(self.pubkey)
@@ -72,8 +74,9 @@ class LiveExecutor:
                 last_send = time.monotonic()
         raise TxFailed(f"{sig} not confirmed within {timeout:.0f}s")
 
-    async def _swap(self, quote: dict) -> str:
-        tx = await self.jup.swap_transaction(quote, self.pubkey, self.cfg.priority_fee_max_lamports)
+    async def _swap(self, quote: dict, fee_cap: int | None = None) -> str:
+        fee_cap = fee_cap if fee_cap is not None else self.cfg.priority_fee_max_lamports
+        tx = await self.jup.swap_transaction(quote, self.pubkey, fee_cap)
         return await self._send_and_confirm(tx)
 
     async def _wait_token_change(self, mint: str, before: int, increase: bool) -> int:
@@ -85,6 +88,14 @@ class LiveExecutor:
         return await self.token_balance(mint)
 
     async def buy(self, mint: str, lamports: int, quote: dict | None = None) -> TradeResult:
+        async with self._trade_lock:
+            return await self._buy(mint, lamports, quote)
+
+    async def sell(self, mint: str, token_amount: int) -> TradeResult:
+        async with self._trade_lock:
+            return await self._sell(mint, token_amount)
+
+    async def _buy(self, mint: str, lamports: int, quote: dict | None = None) -> TradeResult:
         sol_before = await self.sol_balance()
         tok_before = await self.token_balance(mint)
         quote = quote or await self.jup.quote(SOL_MINT, mint, lamports, self.cfg.buy_slippage_bps)
@@ -103,14 +114,14 @@ class LiveExecutor:
         sol_after = await self.sol_balance()
         return TradeResult(sig, sol_before - sol_after, tok_after - tok_before)
 
-    async def sell(self, mint: str, token_amount: int) -> TradeResult:
+    async def _sell(self, mint: str, token_amount: int) -> TradeResult:
         sol_before = await self.sol_balance()
         tok_before = await self.token_balance(mint)
         amount = min(token_amount, tok_before)
         if amount <= 0:
             raise TxFailed(f"no {mint} balance to sell")
         quote = await self.jup.quote(mint, SOL_MINT, amount, self.cfg.sell_slippage_bps)
-        sig = await self._swap(quote)
+        sig = await self._swap(quote, int(self.cfg.priority_fee_max_lamports * self.cfg.sell_priority_fee_multiplier))
         tok_after = await self._wait_token_change(mint, tok_before, increase=False)
         sol_after = await self.sol_balance()
         return TradeResult(sig, sol_after - sol_before, tok_before - tok_after)

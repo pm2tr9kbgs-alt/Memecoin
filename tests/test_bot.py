@@ -449,3 +449,25 @@ async def test_buy_size_follows_market_activity(tmp_path):
     # old readings drop out of the 30-minute window
     bot2.record_activity(quiet, NOW + 31 * 60)
     assert bot2.market_activity() == 0 and bot2.buy_lamports() == full // 2
+
+
+async def test_price_checks_continue_while_scan_is_stuck(tmp_path):
+    import asyncio
+
+    bot, jup = make_bot(tmp_path, [good_candidate("A")], monitor_interval_sec=0.01, scan_interval_sec=0.01,
+                        stop_loss_pct=20, partial_take_profit_pct=0)
+    await bot.scan_once(NOW)
+    assert "A" in bot.state.positions
+
+    async def stuck():  # e.g. RPC retries / slow RugCheck during a scan
+        await asyncio.sleep(3600)
+    bot.dex.latest_token_addresses = stuck
+    jup.sell_rate["A"] = 0.5  # crashes while the scan is stuck
+    task = asyncio.create_task(bot.run())
+    for _ in range(100):
+        await asyncio.sleep(0.01)
+        if "A" not in bot.state.positions:
+            break
+    assert "A" not in bot.state.positions  # stop-loss fired anyway
+    bot.stop()
+    task.cancel()

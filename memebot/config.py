@@ -49,6 +49,7 @@ class Config:
     max_price_impact_pct: float = 5.0
     max_round_trip_loss_pct: float = 15.0  # buy-then-sell quote loss; catches sell taxes / honeypots
     priority_fee_max_lamports: int = 1_000_000  # 0.001 SOL cap
+    sell_priority_fee_multiplier: float = 1.05  # sells may pay slightly more to confirm faster (1 = same as buys)
 
     # --- entry filters (DexScreener data) ---
     min_liquidity_usd: float = 15_000
@@ -155,6 +156,7 @@ class Config:
             max_price_impact_pct=_float("MAX_PRICE_IMPACT_PCT", d.max_price_impact_pct),
             max_round_trip_loss_pct=_float("MAX_ROUND_TRIP_LOSS_PCT", d.max_round_trip_loss_pct),
             priority_fee_max_lamports=_int("PRIORITY_FEE_MAX_LAMPORTS", d.priority_fee_max_lamports),
+            sell_priority_fee_multiplier=_float("SELL_PRIORITY_FEE_MULTIPLIER", d.sell_priority_fee_multiplier),
             min_liquidity_usd=_float("MIN_LIQUIDITY_USD", d.min_liquidity_usd),
             max_liquidity_usd=_float("MAX_LIQUIDITY_USD", d.max_liquidity_usd),
             min_market_cap_usd=_float("MIN_MARKET_CAP_USD", d.min_market_cap_usd),
