@@ -427,3 +427,25 @@ def test_rug_checks_lp_lock_and_creator_balance():
     assert any("liquidity locked" in r for r in reasons) and any("creator" in r for r in reasons)
     assert safety_rejections(SafetyReport(mint="X", lp_locked_pct=100, creator_pct=0), c) == []
     assert rugcheck_lp_and_creator({}) == (None, None)  # missing data doesn't block
+
+
+async def test_buy_size_follows_market_activity(tmp_path):
+    busy = [good_candidate(f"T{i}", liquidity_usd=10) for i in range(8)]  # active but fail filters (not bought)
+    quiet = [good_candidate(f"Q{i}", liquidity_usd=10, volume_m5_usd=100, buys_m5=2, sells_m5=1) for i in range(8)]
+    full = int(0.05 * LAMPORTS_PER_SOL)
+    bot, _ = make_bot(tmp_path, quiet + [good_candidate("A")], buy_amount_sol=0.05, activity_hot_min=6,
+                      quiet_size_fraction=0.5, activity_window_minutes=30)
+    assert bot.buy_lamports() == full // 2  # no data yet: be careful
+    assert await bot.scan_once(NOW) == ["A"]
+    assert bot.market_activity() == 1  # only A was really trading
+    assert bot.state.positions["A"].entry_lamports < full * 0.6  # quiet market: half size
+
+    (tmp_path / "b").mkdir()
+    bot2, _ = make_bot(tmp_path / "b", busy + [good_candidate("B")], buy_amount_sol=0.05, activity_hot_min=6,
+                       quiet_size_fraction=0.5, state_file=str(tmp_path / "s2.json"))
+    assert await bot2.scan_once(NOW) == ["B"]
+    assert bot2.market_activity() == 9 and bot2.market_is_hot()
+    assert bot2.state.positions["B"].entry_lamports >= full  # busy market: full size
+    # old readings drop out of the 30-minute window
+    bot2.record_activity(quiet, NOW + 31 * 60)
+    assert bot2.market_activity() == 0 and bot2.buy_lamports() == full // 2

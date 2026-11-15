@@ -55,6 +55,12 @@ Jupiter, and sells on take-profit, stop-loss, trailing stop or a time limit.
    for the rest of the UTC day once that much has been lost.
    **Losing-streak pause:** after 3 losing trades in a row, it stops buying for 45 minutes. Open positions are still
    managed during the pause (`LOSS_STREAK_LIMIT`, `LOSS_PAUSE_MINUTES`).
+   **Market activity sizing:** on every scan it counts how many of the newest tokens are really trading (at least
+   $5,000 volume and 30 trades in 5 minutes) and averages that over 30 minutes. When the average is 6 or more, the
+   market is busy and it buys the full `BUY_AMOUNT_SOL`; when it is lower, it buys half. This follows the market
+   live instead of fixed hours: in testing, the US evening averaged about 8 and quiet mornings about 3
+   (`ACTIVITY_HOT_MIN`, `QUIET_SIZE_FRACTION`, `ACTIVITY_WINDOW_MINUTES`, `ACTIVITY_MIN_VOLUME_M5_USD`,
+   `ACTIVITY_MIN_TXNS_M5`). The log shows `MARKET HOT` / `MARKET QUIET` whenever it switches.
 
 State (open positions, daily P&L, blacklist) is kept in `state.json`, so a restart picks up where it left off.
 Every fill is appended to `trades.csv`, and logs go to `bot.log`.

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 import logging
 import time
 from dataclasses import dataclass
@@ -50,6 +51,8 @@ class Bot:
         self._halt_logged = False
         self._stop = asyncio.Event()
         self.watchlist: dict[str, Watch] = {}
+        self.activity: deque[tuple[float, int]] = deque()  # (time, active token count) per scan
+        self._last_activity_tier = ""
 
     # ------------------------------------------------------------------ helpers
     def _persist(self) -> None:
@@ -65,6 +68,40 @@ class Bot:
             return False
         last = self.state.traded_mints.get(mint)
         return last is None or now - last > REBUY_COOLDOWN_SEC
+
+    # ------------------------------------------------------------------ market activity / sizing
+    def record_activity(self, candidates: list[TokenCandidate], now: float) -> None:
+        cfg = self.cfg
+        active = sum(1 for c in candidates if c.volume_m5_usd >= cfg.activity_min_volume_m5_usd
+                     and c.buys_m5 + c.sells_m5 >= cfg.activity_min_txns_m5)
+        self.activity.append((now, active))
+        while self.activity and now - self.activity[0][0] > cfg.activity_window_minutes * 60:
+            self.activity.popleft()
+
+    def market_activity(self) -> float | None:
+        """Average number of actively traded tokens per scan over the activity window (None = no data yet)."""
+        if not self.activity:
+            return None
+        return sum(n for _, n in self.activity) / len(self.activity)
+
+    def market_is_hot(self) -> bool:
+        a = self.market_activity()
+        return a is not None and a >= self.cfg.activity_hot_min
+
+    def buy_lamports(self) -> int:
+        """Full BUY_AMOUNT_SOL when the market is busy, a fraction of it when it's quiet."""
+        full = self.cfg.buy_amount_lamports
+        if self.market_is_hot():
+            return full
+        return int(full * max(0.0, min(self.cfg.quiet_size_fraction, 1.0)))
+
+    def _log_activity_tier(self) -> None:
+        a = self.market_activity()
+        tier = "hot" if self.market_is_hot() else "quiet"
+        if tier != self._last_activity_tier:
+            self._last_activity_tier = tier
+            log.info("MARKET %s: %.1f active tokens per scan (30m avg) -> buy size %s",
+                     tier.upper(), a or 0.0, sol(self.buy_lamports()))
 
     def paused(self, now: float) -> bool:
         """True while the losing-streak pause is on (no new buys)."""
@@ -86,6 +123,10 @@ class Bot:
     async def scan_once(self, now: float | None = None) -> list[str]:
         """One discovery pass. Returns mints bought."""
         now = now if now is not None else time.time()
+        all_mints = await self.dex.latest_token_addresses()
+        all_candidates = await self.dex.candidates(all_mints) if all_mints else []
+        self.record_activity(all_candidates, now)  # measured on every scan, even when not buying
+        self._log_activity_tier()
         if len(self.state.positions) >= self.cfg.max_open_positions:
             return []
         if self.daily_limit_hit():
@@ -98,10 +139,10 @@ class Bot:
         if self.paused(now):
             return []
 
-        mints = [m for m in await self.dex.latest_token_addresses() if self._eligible(m, now)]
+        mints = [m for m in all_mints if self._eligible(m, now)]
         if not mints:
             return []
-        candidates = await self.dex.candidates(mints)
+        candidates = [c for c in all_candidates if c.mint in set(mints)]
         passing: list[TokenCandidate] = []
         for c in candidates:
             reasons = screen_rejections(c, self.cfg, now * 1000) + self._pump_rejections(c, now)
@@ -122,6 +163,7 @@ class Bot:
 
     async def _try_buy(self, c: TokenCandidate, now: float) -> bool:
         cfg = self.cfg
+        amount = self.buy_lamports()
         report = await self.safety.inspect(c.mint)
         reasons = safety_rejections(report, cfg)
         if reasons:
@@ -132,19 +174,19 @@ class Bot:
 
         balance = await self.ex.sol_balance()
         reserve = int(cfg.min_sol_reserve * LAMPORTS_PER_SOL)
-        if balance - cfg.buy_amount_lamports - FEE_BUFFER_LAMPORTS < reserve:
-            log.warning("balance %s too low to buy %s and keep %s reserve", sol(balance), sol(cfg.buy_amount_lamports), sol(reserve))
+        if balance - amount - FEE_BUFFER_LAMPORTS < reserve:
+            log.warning("balance %s too low to buy %s and keep %s reserve", sol(balance), sol(amount), sol(reserve))
             return False
 
         try:
-            quote = await self.jup.quote(SOL_MINT, c.mint, cfg.buy_amount_lamports, cfg.buy_slippage_bps)
+            quote = await self.jup.quote(SOL_MINT, c.mint, amount, cfg.buy_slippage_bps)
             impact = price_impact_pct(quote)
             if impact > cfg.max_price_impact_pct:
                 log.info("reject %s: price impact %.2f%%", c.symbol, impact)
                 return False
             # Honeypot / sell-tax check: can we sell back what we would buy, and for how much?
             back = await self.jup.quote(c.mint, SOL_MINT, out_amount(quote), cfg.sell_slippage_bps)
-            round_trip_loss = (1 - out_amount(back) / cfg.buy_amount_lamports) * 100
+            round_trip_loss = (1 - out_amount(back) / amount) * 100
             if round_trip_loss > cfg.max_round_trip_loss_pct:
                 log.info("reject %s: round-trip loss %.1f%% (possible tax/honeypot)", c.symbol, round_trip_loss)
                 self.state.blacklist[c.mint] = f"round-trip loss {round_trip_loss:.1f}%"
@@ -154,22 +196,24 @@ class Bot:
             return False
 
         if cfg.dip_trigger_pct > 0 and c.price_change_m5_pct >= cfg.dip_trigger_pct:
-            price = cfg.buy_amount_lamports / max(out_amount(quote), 1)
+            price = amount / max(out_amount(quote), 1)
             self.watchlist[c.mint] = Watch(c, now, price, price)
             log.info("WATCH %s (%s): up %+.1f%% in 5m, waiting for a %.0f%% dip before buying",
                      c.symbol, c.mint, c.price_change_m5_pct, cfg.dip_pct)
             return False
-        return await self._execute_buy(c, quote, now)
+        return await self._execute_buy(c, quote, now, amount=amount)
 
-    async def _execute_buy(self, c: TokenCandidate, quote: dict, now: float, note: str = "") -> bool:
+    async def _execute_buy(self, c: TokenCandidate, quote: dict, now: float, note: str = "",
+                           amount: int | None = None) -> bool:
         cfg = self.cfg
+        amount = amount or self.buy_lamports()
         log.info("BUY %s (%s) %s | liq $%s mcap $%s 5m %+.1f%% b/s %.2f", c.symbol, c.mint,
-                 sol(cfg.buy_amount_lamports), f"{c.liquidity_usd:,.0f}", f"{c.market_cap_usd:,.0f}",
+                 sol(amount), f"{c.liquidity_usd:,.0f}", f"{c.market_cap_usd:,.0f}",
                  c.price_change_m5_pct, c.buy_sell_ratio_m5)
         if note:
             log.info("    %s", note)
         try:
-            res = await self.ex.buy(c.mint, cfg.buy_amount_lamports, quote)
+            res = await self.ex.buy(c.mint, amount, quote)
         except (TxFailed, RPCError, httpx.HTTPError, NoRouteError) as exc:
             log.error("buy %s failed: %s", c.symbol, exc)
             self.state.traded_mints[c.mint] = now
@@ -196,6 +240,7 @@ class Bot:
         """Re-price watched (spiked) tokens; buy the ones that pulled back enough. Returns mints bought."""
         now = now if now is not None else time.time()
         cfg = self.cfg
+        amount = self.buy_lamports()
         bought: list[str] = []
         for mint, w in list(self.watchlist.items()):
             sym = w.candidate.symbol
@@ -204,13 +249,13 @@ class Bot:
                 del self.watchlist[mint]
                 continue
             try:
-                quote = await self.jup.quote(SOL_MINT, mint, cfg.buy_amount_lamports, cfg.buy_slippage_bps)
+                quote = await self.jup.quote(SOL_MINT, mint, amount, cfg.buy_slippage_bps)
             except NoRouteError:
                 continue
             except (httpx.HTTPError, ValueError) as exc:
                 log.debug("watch quote %s failed: %s", sym, exc)
                 continue
-            price = cfg.buy_amount_lamports / max(out_amount(quote), 1)
+            price = amount / max(out_amount(quote), 1)
             w.last_price = price
             w.peak_price = max(w.peak_price, price)
             dip = (1 - price / w.peak_price) * 100
@@ -226,7 +271,8 @@ class Bot:
             if price_impact_pct(quote) > cfg.max_price_impact_pct:
                 continue
             del self.watchlist[mint]
-            if await self._execute_buy(w.candidate, quote, now, note=f"bought the dip: {dip:.1f}% below its high"):
+            if await self._execute_buy(w.candidate, quote, now, note=f"bought the dip: {dip:.1f}% below its high",
+                                       amount=amount):
                 bought.append(mint)
         return bought
 

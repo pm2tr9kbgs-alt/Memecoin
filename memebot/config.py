@@ -104,6 +104,14 @@ class Config:
     # losing-streak pause: after this many losing trades in a row, stop buying for loss_pause_minutes (0 = off)
     loss_streak_limit: int = 3
     loss_pause_minutes: float = 45.0
+    # market activity meter: on each scan, count tokens with real trading (5m volume and txns above these),
+    # averaged over activity_window_minutes. Below activity_hot_min the market is quiet and buys are
+    # scaled by quiet_size_fraction (1 = always full size). In testing: busy US evening ~8, quiet mornings ~3.
+    activity_window_minutes: float = 30.0
+    activity_min_volume_m5_usd: float = 5_000
+    activity_min_txns_m5: int = 30
+    activity_hot_min: float = 6.0
+    quiet_size_fraction: float = 0.5
     # pyramiding: add add_amount_sol each time the price rises add_trigger_pct above the last buy (0 = off)
     add_trigger_pct: float = 50.0
     add_amount_sol: float = 0.025
@@ -189,6 +197,11 @@ class Config:
             partial_take_profit_fraction=_float("PARTIAL_TAKE_PROFIT_FRACTION", d.partial_take_profit_fraction),
             loss_streak_limit=_int("LOSS_STREAK_LIMIT", d.loss_streak_limit),
             loss_pause_minutes=_float("LOSS_PAUSE_MINUTES", d.loss_pause_minutes),
+            activity_window_minutes=_float("ACTIVITY_WINDOW_MINUTES", d.activity_window_minutes),
+            activity_min_volume_m5_usd=_float("ACTIVITY_MIN_VOLUME_M5_USD", d.activity_min_volume_m5_usd),
+            activity_min_txns_m5=_int("ACTIVITY_MIN_TXNS_M5", d.activity_min_txns_m5),
+            activity_hot_min=_float("ACTIVITY_HOT_MIN", d.activity_hot_min),
+            quiet_size_fraction=_float("QUIET_SIZE_FRACTION", d.quiet_size_fraction),
             add_trigger_pct=_float("ADD_TRIGGER_PCT", d.add_trigger_pct),
             add_amount_sol=_float("ADD_AMOUNT_SOL", d.add_amount_sol),
             max_adds=_int("MAX_ADDS", d.max_adds),
