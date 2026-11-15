@@ -21,7 +21,6 @@ from .strategy import exit_reason, momentum_score, screen_rejections
 
 log = logging.getLogger("memebot")
 
-REBUY_COOLDOWN_SEC = 24 * 3600
 NO_ROUTE_SELL_AFTER = 5
 FEE_BUFFER_LAMPORTS = 3_000_000  # priority fee + token account rent headroom
 
@@ -67,7 +66,7 @@ class Bot:
         if mint in self.state.positions or mint in self.state.blacklist or mint in self.watchlist:
             return False
         last = self.state.traded_mints.get(mint)
-        return last is None or now - last > REBUY_COOLDOWN_SEC
+        return last is None or now - last > self.cfg.rebuy_cooldown_minutes * 60
 
     # ------------------------------------------------------------------ market activity / sizing
     def record_activity(self, candidates: list[TokenCandidate], now: float) -> None:

@@ -501,3 +501,14 @@ def test_trailing_stop_10_until_100_then_20():
     assert run(1.50, 1.36) is None
     assert run(2.50, 2.10) is None  # peak +150%: 20% trail, -16% from high holds
     assert run(2.50, 1.99) == "trailing_stop"
+
+
+async def test_rebuy_cooldown(tmp_path):
+    bot, jup = make_bot(tmp_path, [good_candidate("A")], rebuy_cooldown_minutes=180, partial_take_profit_levels=(),
+                        stop_loss_pct=15, loss_streak_limit=0)
+    assert await bot.scan_once(NOW) == ["A"]
+    jup.sell_rate["A"] = 0.8
+    assert await bot.monitor_once(NOW + 10) == ["A"]
+    jup.sell_rate["A"] = 1.0
+    assert await bot.scan_once(NOW + 179 * 60) == []  # still cooling down
+    assert await bot.scan_once(NOW + 181 * 60) == ["A"]

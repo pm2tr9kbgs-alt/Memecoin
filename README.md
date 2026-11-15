@@ -48,7 +48,8 @@ Jupiter, and sells on take-profit, stop-loss, trailing stop or a time limit.
    Optional: `TAKE_PROFIT_PCT`
    to cap gains, `TRAILING_ACTIVATION_PCT` to start trailing only after a gain, `MAX_HOLD_MINUTES` for a time limit.
    Positions that aren't at least +5% up after 30 minutes are sold to free the slot
-   (`STALE_AFTER_MINUTES`, `STALE_MIN_PROFIT_PCT`).
+   (`STALE_AFTER_MINUTES`, `STALE_MIN_PROFIT_PCT`). After a token has been traded, it isn't bought again for
+   3 hours (`REBUY_COOLDOWN_MINUTES`); in testing, buying back within an hour of selling lost money.
    **Take-profit ladder:** it sells 25% of the original position at +25%, another 25% at +50% and another 25% at
    +100%, then keeps the last 25% riding until the trailing stop sells it. If the price jumps past several levels
    at once, those parts are sold together (`PARTIAL_TAKE_PROFIT_LEVELS`, `PARTIAL_TAKE_PROFIT_FRACTION`; these sales
