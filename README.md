@@ -20,6 +20,9 @@ Jupiter, and sells on take-profit, stop-loss, trailing stop or a time limit.
    the buy/sell ratio, and the 5-minute price change. That change has a ceiling so the bot doesn't buy the top of a vertical candle.
    **Graduation:** a pump.fun or bonk token that moved to a real DEX less than 10 minutes ago is skipped, because
    early buyers usually sell right after graduation (`GRADUATION_WAIT_MINUTES`).
+   **Already pumped:** a token whose 1-hour price change went above +150% at any point in the last 2 hours is skipped,
+   even once the 1-hour number cools off (`PUMPED_H1_PCT`, `PUMPED_MEMORY_MINUTES`). In overnight testing, these buys
+   lost about three times more than all other trades combined, and included both rugs.
 4. **Safety checks.** These run on-chain through your RPC, plus RugCheck:
    - mint authority and freeze authority must be revoked
    - limits on how much the top 10 wallets and the single largest wallet hold. Pools and bonding curves are
@@ -40,9 +43,9 @@ Jupiter, and sells on take-profit, stop-loss, trailing stop or a time limit.
    to cap gains, `TRAILING_ACTIVATION_PCT` to start trailing only after a gain, `MAX_HOLD_MINUTES` for a time limit.
    Positions that aren't at least +5% up after 30 minutes are sold to free the slot
    (`STALE_AFTER_MINUTES`, `STALE_MIN_PROFIT_PCT`).
-   **Adding to winners:** each time a position rises +50% above its last buy, it adds 0.025 SOL, at most twice
-   (`ADD_TRIGGER_PCT`, `ADD_AMOUNT_SOL`, `MAX_ADDS`). This raises the average cost, so a sharp reversal after an
-   add can turn a winner into a small loss.
+   **Adding to winners (off by default):** with `MAX_ADDS` above 0, each time a position rises +50% above its last buy,
+   it adds 0.025 SOL (`ADD_TRIGGER_PCT`, `ADD_AMOUNT_SOL`). In testing, both adds landed at the top and roughly halved
+   the profit, so it is turned off.
    **Winner alerts:** each time a position gains another 25% (+25%, +50%, ...), the bot logs a `WINNER` line with the
    token address and DexScreener link and appends it to `winners.txt` (`WINNER_ALERT_PCT`).
 8. **Risk limits:** `MAX_OPEN_POSITIONS`, `MIN_SOL_RESERVE`, and `DAILY_LOSS_LIMIT_SOL`, which stops new buys

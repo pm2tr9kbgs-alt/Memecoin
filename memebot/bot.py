@@ -66,6 +66,18 @@ class Bot:
         last = self.state.traded_mints.get(mint)
         return last is None or now - last > REBUY_COOLDOWN_SEC
 
+    def _pump_rejections(self, c: TokenCandidate, now: float) -> list[str]:
+        """Remember tokens that pumped hard; skip them for a while even after the 1h change cools off."""
+        cfg = self.cfg
+        if cfg.pumped_h1_pct <= 0:
+            return []
+        if c.price_change_h1_pct > cfg.pumped_h1_pct:
+            self.state.pumped[c.mint] = now
+        last = self.state.pumped.get(c.mint)
+        if last is not None and (now - last) / 60 < cfg.pumped_memory_minutes:
+            return [f"already pumped (1h change above +{cfg.pumped_h1_pct:.0f}% {(now - last) / 60:.0f}m ago)"]
+        return []
+
     # ------------------------------------------------------------------ entries
     async def scan_once(self, now: float | None = None) -> list[str]:
         """One discovery pass. Returns mints bought."""
@@ -86,7 +98,7 @@ class Bot:
         candidates = await self.dex.candidates(mints)
         passing: list[TokenCandidate] = []
         for c in candidates:
-            reasons = screen_rejections(c, self.cfg, now * 1000)
+            reasons = screen_rejections(c, self.cfg, now * 1000) + self._pump_rejections(c, now)
             if reasons:
                 log.debug("skip %s (%s): %s", c.symbol, c.mint[:6], "; ".join(reasons))
             else:

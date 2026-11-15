@@ -23,6 +23,7 @@ class BotState:
     realized_by_day: dict[str, int] = field(default_factory=dict)  # lamports
     traded_mints: dict[str, float] = field(default_factory=dict)  # mint -> last trade time
     blacklist: dict[str, str] = field(default_factory=dict)  # mint -> reason (failed safety)
+    pumped: dict[str, float] = field(default_factory=dict)  # mint -> last time its 1h change was above PUMPED_H1_PCT
     paper_balance: int | None = None
 
     @classmethod
@@ -37,6 +38,7 @@ class BotState:
             realized_by_day={k: int(v) for k, v in raw.get("realized_by_day", {}).items()},
             traded_mints=raw.get("traded_mints", {}),
             blacklist=raw.get("blacklist", {}),
+            pumped=raw.get("pumped", {}),
             paper_balance=raw.get("paper_balance"),
         )
 
@@ -46,6 +48,7 @@ class BotState:
             "realized_by_day": self.realized_by_day,
             "traded_mints": self.traded_mints,
             "blacklist": dict(list(self.blacklist.items())[-5000:]),
+            "pumped": dict(list(self.pumped.items())[-5000:]),
             "paper_balance": self.paper_balance,
         }
         tmp = self.path + ".tmp"

@@ -376,3 +376,19 @@ def test_trailing_stop_tightens_after_big_gain():
     exit_reason(big, 1_300_000, NOW, c)                            # peak +30%: tight 10% trail
     assert exit_reason(big, 1_200_000, NOW, c) is None             # 7.7% off the peak
     assert exit_reason(big, 1_160_000, NOW, c) == "trailing_stop"  # 10.8% off -> sell at about +16%
+
+
+async def test_already_pumped_tokens_skipped_after_h1_cools(tmp_path):
+    c = good_candidate("A", price_change_h1_pct=200)  # pumping hard: remembered and skipped
+    bot, _ = make_bot(tmp_path, [c])
+    assert await bot.scan_once(NOW) == []
+    assert "A" in bot.state.pumped
+    c.price_change_h1_pct = 40  # an hour later the 1h change looks calm, but it already pumped
+    assert await bot.scan_once(NOW + 60 * 60) == []
+    assert await bot.scan_once(NOW + 121 * 60) == ["A"]  # memory expired
+    bot.state.save()
+    assert BotState.load(bot.state.path).pumped["A"] == NOW
+
+
+def test_adds_off_by_default():
+    assert Config().max_adds == 0

@@ -63,6 +63,10 @@ class Config:
     min_price_change_m5_pct: float = 3.0
     max_price_change_m5_pct: float = 40.0  # don't chase vertical candles
     max_price_change_h1_pct: float = 300.0
+    # skip tokens whose 1h change was above this at any point in the last pumped_memory_minutes (0 = off);
+    # in testing, buying after a big pump lost far more than it made (incl. most rugs)
+    pumped_h1_pct: float = 150.0
+    pumped_memory_minutes: float = 120.0
     graduation_wait_minutes: float = 10.0  # skip launchpad tokens that moved to a DEX pool less than this ago
     min_hype_score: float = 0.0  # 0-100 from activity acceleration, socials and boosts (0 = off)
     max_hype_score: float = 60.0  # extreme hype was mostly coordinated pump-and-dumps in testing (0 = off)
@@ -96,7 +100,7 @@ class Config:
     # pyramiding: add add_amount_sol each time the price rises add_trigger_pct above the last buy (0 = off)
     add_trigger_pct: float = 50.0
     add_amount_sol: float = 0.025
-    max_adds: int = 2
+    max_adds: int = 0  # off: in testing, adds landed at the top and cut profits
     winner_alert_pct: float = 25.0  # announce a position each time it gains another this-many % (0 = off)
     winners_file: str = "winners.txt"
 
@@ -148,6 +152,8 @@ class Config:
             min_price_change_m5_pct=_float("MIN_PRICE_CHANGE_M5_PCT", d.min_price_change_m5_pct),
             max_price_change_m5_pct=_float("MAX_PRICE_CHANGE_M5_PCT", d.max_price_change_m5_pct),
             max_price_change_h1_pct=_float("MAX_PRICE_CHANGE_H1_PCT", d.max_price_change_h1_pct),
+            pumped_h1_pct=_float("PUMPED_H1_PCT", d.pumped_h1_pct),
+            pumped_memory_minutes=_float("PUMPED_MEMORY_MINUTES", d.pumped_memory_minutes),
             graduation_wait_minutes=_float("GRADUATION_WAIT_MINUTES", d.graduation_wait_minutes),
             min_hype_score=_float("MIN_HYPE_SCORE", d.min_hype_score),
             max_hype_score=_float("MAX_HYPE_SCORE", d.max_hype_score),
