@@ -99,8 +99,10 @@ class Config:
     stop_loss_pct: float = 20.0
     trailing_activation_pct: float = 0.0  # 0 = trailing stop active from entry (stop follows the peak)
     trailing_stop_pct: float = 20.0  # sell when value falls this far below the peak
-    tight_trail_after_pct: float = 0.0  # once the peak gain reaches this... (0 = off: same 20% trail throughout)
+    tight_trail_after_pct: float = 25.0  # once the peak gain reaches this... (0 = off)
     tight_trailing_stop_pct: float = 10.0  # ...trail this close instead, to keep more of the gain
+    runner_trail_after_pct: float = 100.0  # once the peak gain reaches this... (0 = off)
+    runner_trailing_stop_pct: float = 20.0  # ...give big runners more room again
     max_hold_minutes: float = 0.0  # 0 = no time limit
     stale_after_minutes: float = 30.0  # sell positions that haven't made STALE_MIN_PROFIT_PCT by then (0 = off)
     stale_min_profit_pct: float = 5.0
@@ -198,6 +200,8 @@ class Config:
             trailing_stop_pct=_float("TRAILING_STOP_PCT", d.trailing_stop_pct),
             tight_trail_after_pct=_float("TIGHT_TRAIL_AFTER_PCT", d.tight_trail_after_pct),
             tight_trailing_stop_pct=_float("TIGHT_TRAILING_STOP_PCT", d.tight_trailing_stop_pct),
+            runner_trail_after_pct=_float("RUNNER_TRAIL_AFTER_PCT", d.runner_trail_after_pct),
+            runner_trailing_stop_pct=_float("RUNNER_TRAILING_STOP_PCT", d.runner_trailing_stop_pct),
             max_hold_minutes=_float("MAX_HOLD_MINUTES", d.max_hold_minutes),
             stale_after_minutes=_float("STALE_AFTER_MINUTES", d.stale_after_minutes),
             stale_min_profit_pct=_float("STALE_MIN_PROFIT_PCT", d.stale_min_profit_pct),

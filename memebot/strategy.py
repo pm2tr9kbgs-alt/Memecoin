@@ -66,7 +66,9 @@ def exit_reason(pos: Position, value_lamports: int, now: float, cfg: Config) -> 
         drawdown = (1 - value_lamports / pos.peak_value_lamports) * 100
         trail = cfg.trailing_stop_pct
         if cfg.tight_trail_after_pct > 0 and peak_pnl >= cfg.tight_trail_after_pct:
-            trail = cfg.tight_trailing_stop_pct  # lock in more of a big gain
+            trail = cfg.tight_trailing_stop_pct  # lock in more of a good gain
+        if cfg.runner_trail_after_pct > 0 and peak_pnl >= cfg.runner_trail_after_pct:
+            trail = cfg.runner_trailing_stop_pct  # a big runner gets more room to swing
         if drawdown >= trail:
             return "trailing_stop"
     held_min = (now - pos.opened_at) / 60

@@ -379,7 +379,8 @@ def test_adds_off_by_default():
 
 async def test_take_profit_ladder_sells_quarters_and_keeps_last_quarter(tmp_path):
     bot, jup = make_bot(tmp_path, [good_candidate("A")], partial_take_profit_levels=(25, 50, 100),
-                        partial_take_profit_fraction=0.25, trailing_stop_pct=20, tight_trail_after_pct=0,
+                        partial_take_profit_fraction=0.25, trailing_stop_pct=20, tight_trail_after_pct=25,
+                        tight_trailing_stop_pct=10, runner_trail_after_pct=100, runner_trailing_stop_pct=20,
                         stale_after_minutes=0, winner_alert_pct=0)
     await bot.scan_once(NOW)
     pos = bot.state.positions["A"]
@@ -486,3 +487,17 @@ async def test_price_checks_continue_while_scan_is_stuck(tmp_path):
     assert "A" not in bot.state.positions  # stop-loss fired anyway
     bot.stop()
     task.cancel()
+
+
+def test_trailing_stop_10_until_100_then_20():
+    c = cfg(trailing_stop_pct=20, tight_trail_after_pct=25, tight_trailing_stop_pct=10, runner_trail_after_pct=100,
+            runner_trailing_stop_pct=20, stale_after_minutes=0, take_profit_pct=0, trailing_activation_pct=0)
+    def run(peak_mult, now_mult):
+        pos = Position(mint="M", symbol="M", entry_lamports=1000, token_amount=1, opened_at=NOW,
+                       peak_value_lamports=int(1000 * peak_mult))
+        return exit_reason(pos, int(1000 * now_mult), NOW + 60, c)
+    assert run(1.20, 1.00) is None  # peak +20%: 20% trail, -16.7% from high holds
+    assert run(1.50, 1.34) == "trailing_stop"  # peak +50%: 10% trail
+    assert run(1.50, 1.36) is None
+    assert run(2.50, 2.10) is None  # peak +150%: 20% trail, -16% from high holds
+    assert run(2.50, 1.99) == "trailing_stop"

@@ -38,14 +38,19 @@ Jupiter, and sells on take-profit, stop-loss, trailing stop or a time limit.
    actual token and SOL balance changes.
 7. **Manage.** Every `MONITOR_INTERVAL_SEC` it values each position with a real Jupiter sell quote. Price checks run
    separately from scanning, so a slow safety check or RPC retry never leaves open trades unwatched. By default it
-   sells whatever it still holds once the price falls 20% below its highest point (`TRAILING_STOP_PCT`). Before any
-   gain, that is the same as a −20% stop-loss. Optional: `TIGHT_TRAIL_AFTER_PCT` / `TIGHT_TRAILING_STOP_PCT` to trail
-   closer after a big gain (off by default), `TAKE_PROFIT_PCT`
+   sells whatever it still holds once the price falls a set amount below its highest point. How much depends on the
+   best gain so far:
+   - below +25%: 20% below the high (`TRAILING_STOP_PCT`), the same as a −20% stop-loss before any gain
+   - from +25% to +100%: 10% below the high, to keep more of the gain (`TIGHT_TRAIL_AFTER_PCT`, `TIGHT_TRAILING_STOP_PCT`)
+   - from +100% up: 20% below the high again, so big runners have room to swing (`RUNNER_TRAIL_AFTER_PCT`,
+     `RUNNER_TRAILING_STOP_PCT`)
+
+   Optional: `TAKE_PROFIT_PCT`
    to cap gains, `TRAILING_ACTIVATION_PCT` to start trailing only after a gain, `MAX_HOLD_MINUTES` for a time limit.
    Positions that aren't at least +5% up after 30 minutes are sold to free the slot
    (`STALE_AFTER_MINUTES`, `STALE_MIN_PROFIT_PCT`).
    **Take-profit ladder:** it sells 25% of the original position at +25%, another 25% at +50% and another 25% at
-   +100%, then keeps the last 25% riding until the 20% trailing stop sells it. If the price jumps past several levels
+   +100%, then keeps the last 25% riding until the trailing stop sells it. If the price jumps past several levels
    at once, those parts are sold together (`PARTIAL_TAKE_PROFIT_LEVELS`, `PARTIAL_TAKE_PROFIT_FRACTION`; these sales
    show as `partial` in `trades.csv`).
    **Adding to winners (off by default):** with `MAX_ADDS` above 0, each time a position rises +50% above its last buy,
