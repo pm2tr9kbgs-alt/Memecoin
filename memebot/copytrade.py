@@ -29,6 +29,7 @@ from .swaps import Swap, parse_swaps
 
 log = logging.getLogger("memebot.copy")
 
+MAX_PAGES = 5  # 5,000 signatures per wallet per poll
 TX_OPTS = {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 1, "commitment": "confirmed"}
 
 
@@ -80,11 +81,22 @@ class CopyTrader:
 
     async def new_swaps(self, wallet: str) -> list[Swap]:
         """The wallet's swaps since the last poll, oldest first."""
-        opts: dict = {"limit": 25}
+        # Busy wallets are referenced by thousands of other transactions per minute (mostly failed bot
+        # transactions), so read up to a few pages back to the cursor and only open the successful ones.
         cursor = self.state.copy_cursor.get(wallet)
-        if cursor:
-            opts["until"] = cursor
-        sigs = await self.rpc.call("getSignaturesForAddress", [wallet, opts])
+        sigs: list[dict] = []
+        before = None
+        for _ in range(MAX_PAGES):
+            opts: dict = {"limit": 1000}
+            if cursor:
+                opts["until"] = cursor
+            if before:
+                opts["before"] = before
+            page = await self.rpc.call("getSignaturesForAddress", [wallet, opts])
+            sigs += page or []
+            if not page or len(page) < 1000 or not cursor:
+                break
+            before = page[-1]["signature"]
         if not sigs:
             return []
         self.state.copy_cursor[wallet] = sigs[0]["signature"]

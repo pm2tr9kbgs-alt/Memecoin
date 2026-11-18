@@ -540,8 +540,10 @@ class FakeRPC:
         self.txs = {}  # signature -> tx
         self.order = {}  # wallet -> [signatures newest first]
 
-    def add(self, wallet, sig, tx):
+    def add(self, wallet, sig, tx, err=None):
         self.txs[sig] = tx
+        self.errs = getattr(self, "errs", {})
+        self.errs[sig] = err
         self.order.setdefault(wallet, []).insert(0, sig)
 
     async def call(self, method, params):
@@ -550,7 +552,10 @@ class FakeRPC:
             sigs = self.order.get(wallet, [])
             if "until" in opts and opts["until"] in sigs:
                 sigs = sigs[: sigs.index(opts["until"])]
-            return [{"signature": s, "err": None} for s in sigs[: opts.get("limit", 1000)]]
+            if "before" in opts and opts["before"] in sigs:
+                sigs = sigs[sigs.index(opts["before"]) + 1:]
+            errs = getattr(self, "errs", {})
+            return [{"signature": s, "err": errs.get(s)} for s in sigs[: opts.get("limit", 1000)]]
         if method == "getTransaction":
             return self.txs[params[0]]
         raise AssertionError(method)
@@ -602,3 +607,20 @@ async def test_copy_trader_skips_late_small_and_unsafe_buys(tmp_path):
     rpc.add("L", "bad", fake_tx("L", "BAD", None, 10, 10**10, 9 * 10**9, t=NOW))  # fails safety checks
     await copier.poll_once(NOW)
     assert not copier.state.positions and "BAD" in copier.state.blacklist
+
+
+async def test_copy_trader_finds_buy_among_thousands_of_failed_bot_txs(tmp_path):
+    from memebot.copytrade import CopyTrader
+
+    c = cfg(tmp_path, copy_wallets="WHALE", copy_min_leader_sol=0.1, copy_max_delay_sec=30)
+    jup = FakeJupiter()
+    rpc = FakeRPC()
+    rpc.add("WHALE", "start", fake_tx("WHALE", "X", None, 1, 10**10, 10**10 - 1, t=NOW - 60))
+    copier = CopyTrader(c, rpc, FakeSafety(), jup, PaperExecutor(c, jup, 2 * LAMPORTS_PER_SOL),
+                        BotState(path=c.state_file))
+    await copier.start()
+    rpc.add("WHALE", "buy", fake_tx("WHALE", "GEM", None, 500, 10**11, 9 * 10**10, t=NOW - 2))  # 10 SOL buy
+    for i in range(1500):  # other bots' failed transactions referencing the wallet
+        rpc.add("WHALE", f"noise{i}", None, err={"InstructionError": [0, "x"]})
+    await copier.poll_once(NOW)
+    assert "GEM" in copier.state.positions
