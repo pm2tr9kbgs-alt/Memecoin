@@ -92,7 +92,17 @@ class CopyTrader:
                 opts["until"] = cursor
             if before:
                 opts["before"] = before
-            page = await self.rpc.call("getSignaturesForAddress", [wallet, opts])
+            try:
+                page = await self.rpc.call("getSignaturesForAddress", [wallet, opts])
+            except RPCError as exc:
+                if cursor and "not found" in str(exc):
+                    # the RPC node doesn't know our bookmark (public nodes lag each other): restart from the newest
+                    latest = await self.rpc.call("getSignaturesForAddress", [wallet, {"limit": 1}])
+                    if latest:
+                        self.state.copy_cursor[wallet] = latest[0]["signature"]
+                    log.debug("%s: cursor reset (%s)", short(wallet), exc)
+                    return []
+                raise
             sigs += page or []
             if not page or len(page) < 1000 or not cursor:
                 break
