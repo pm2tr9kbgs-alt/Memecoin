@@ -117,6 +117,13 @@ class Config:
     # market activity meter: on each scan, count tokens with real trading (5m volume and txns above these),
     # averaged over activity_window_minutes. Below activity_hot_min the market is quiet and buys are
     # scaled by quiet_size_fraction (1 = always full size). In testing: busy US evening ~8, quiet mornings ~3.
+    # copy trading (python -m memebot copy): mirror the buys and sells of these wallets
+    copy_wallets: str = ""  # comma-separated wallet addresses
+    copy_buy_amount_sol: float = 0.0  # SOL per copied buy (0 = BUY_AMOUNT_SOL)
+    copy_poll_sec: float = 2.0  # how often each wallet is checked for new transactions
+    copy_min_leader_sol: float = 0.1  # ignore the wallet's buys smaller than this (dust, tests)
+    copy_max_delay_sec: float = 30.0  # don't copy a buy we noticed later than this (price has moved)
+    copy_stop_loss_pct: float = 0.0  # optional own stop-loss on copied positions (0 = only sell when they sell)
     activity_window_minutes: float = 30.0
     activity_min_volume_m5_usd: float = 5_000
     activity_min_txns_m5: int = 30
@@ -143,6 +150,14 @@ class Config:
     @property
     def buy_amount_lamports(self) -> int:
         return int(self.buy_amount_sol * LAMPORTS_PER_SOL)
+
+    @property
+    def copy_wallet_list(self) -> list[str]:
+        return [w.strip() for w in self.copy_wallets.replace(";", ",").split(",") if w.strip()]
+
+    @property
+    def copy_buy_lamports(self) -> int:
+        return int((self.copy_buy_amount_sol or self.buy_amount_sol) * LAMPORTS_PER_SOL)
 
     @classmethod
     def from_env(cls, env_file: str | None = ".env", **overrides) -> "Config":
@@ -211,6 +226,12 @@ class Config:
             partial_take_profit_fraction=_float("PARTIAL_TAKE_PROFIT_FRACTION", d.partial_take_profit_fraction),
             loss_streak_limit=_int("LOSS_STREAK_LIMIT", d.loss_streak_limit),
             loss_pause_minutes=_float("LOSS_PAUSE_MINUTES", d.loss_pause_minutes),
+            copy_wallets=_env("COPY_WALLETS", d.copy_wallets),
+            copy_buy_amount_sol=_float("COPY_BUY_AMOUNT_SOL", d.copy_buy_amount_sol),
+            copy_poll_sec=_float("COPY_POLL_SEC", d.copy_poll_sec),
+            copy_min_leader_sol=_float("COPY_MIN_LEADER_SOL", d.copy_min_leader_sol),
+            copy_max_delay_sec=_float("COPY_MAX_DELAY_SEC", d.copy_max_delay_sec),
+            copy_stop_loss_pct=_float("COPY_STOP_LOSS_PCT", d.copy_stop_loss_pct),
             activity_window_minutes=_float("ACTIVITY_WINDOW_MINUTES", d.activity_window_minutes),
             activity_min_volume_m5_usd=_float("ACTIVITY_MIN_VOLUME_M5_USD", d.activity_min_volume_m5_usd),
             activity_min_txns_m5=_int("ACTIVITY_MIN_TXNS_M5", d.activity_min_txns_m5),

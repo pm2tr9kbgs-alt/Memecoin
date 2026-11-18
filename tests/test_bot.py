@@ -512,3 +512,93 @@ async def test_rebuy_cooldown(tmp_path):
     jup.sell_rate["A"] = 1.0
     assert await bot.scan_once(NOW + 179 * 60) == []  # still cooling down
     assert await bot.scan_once(NOW + 181 * 60) == ["A"]
+
+
+# ---------------------------------------------------------------- copy trading
+def fake_tx(wallet, mint, tok_pre, tok_post, sol_pre, sol_post, t=NOW, err=None):
+    bal = lambda amt: [{"accountIndex": 1, "mint": mint, "owner": wallet,  # noqa: E731
+                        "uiTokenAmount": {"amount": str(amt)}}] if amt is not None else []
+    return {"blockTime": t, "transaction": {"message": {"accountKeys": [{"pubkey": wallet}]}},
+            "meta": {"err": err, "preBalances": [sol_pre], "postBalances": [sol_post],
+                     "preTokenBalances": bal(tok_pre), "postTokenBalances": bal(tok_post)}}
+
+
+def test_parse_swaps_buy_sell_and_failed():
+    from memebot.swaps import parse_swaps
+
+    buy = parse_swaps(fake_tx("W", "M", None, 1000, 5_000_000_000, 4_000_000_000))[0]
+    assert buy.is_buy and buy.token_delta == 1000 and buy.sol_delta == -1_000_000_000 and buy.token_after == 1000
+    sell = parse_swaps(fake_tx("W", "M", 1000, 400, 4_000_000_000, 4_500_000_000))[0]
+    assert sell.is_sell and sell.token_delta == -600 and sell.token_after == 400
+    assert parse_swaps(fake_tx("W", "M", None, 1000, 5, 4, err={"x": 1})) == []
+
+
+class FakeRPC:
+    """Serves a scripted list of transactions per wallet, newest first, like getSignaturesForAddress."""
+
+    def __init__(self):
+        self.txs = {}  # signature -> tx
+        self.order = {}  # wallet -> [signatures newest first]
+
+    def add(self, wallet, sig, tx):
+        self.txs[sig] = tx
+        self.order.setdefault(wallet, []).insert(0, sig)
+
+    async def call(self, method, params):
+        if method == "getSignaturesForAddress":
+            wallet, opts = params
+            sigs = self.order.get(wallet, [])
+            if "until" in opts and opts["until"] in sigs:
+                sigs = sigs[: sigs.index(opts["until"])]
+            return [{"signature": s, "err": None} for s in sigs[: opts.get("limit", 1000)]]
+        if method == "getTransaction":
+            return self.txs[params[0]]
+        raise AssertionError(method)
+
+
+async def test_copy_trader_mirrors_buys_and_partial_sells(tmp_path):
+    from memebot.copytrade import CopyTrader
+
+    c = cfg(tmp_path, copy_wallets="LEADER", copy_buy_amount_sol=0.05, copy_min_leader_sol=0.1,
+            copy_max_delay_sec=30)
+    jup = FakeJupiter()
+    ex = PaperExecutor(c, jup, 2 * LAMPORTS_PER_SOL)
+    rpc = FakeRPC()
+    rpc.add("LEADER", "old", fake_tx("LEADER", "OLD", None, 5, 10**10, 9 * 10**9, t=NOW - 3600))
+    copier = CopyTrader(c, rpc, FakeSafety(), jup, ex, BotState(path=c.state_file))
+    await copier.start()  # old trades are not copied
+    await copier.poll_once(NOW)
+    assert not copier.state.positions
+
+    rpc.add("LEADER", "b1", fake_tx("LEADER", "TOK", None, 10_000, 10**10, 9 * 10**9, t=NOW - 3))  # 1 SOL buy
+    await copier.poll_once(NOW)
+    pos = copier.state.positions["TOK"]
+    assert pos.copied_from == "LEADER" and pos.leader_tokens == 10_000
+    mine = pos.token_amount
+
+    jup.sell_rate["TOK"] = 2.0  # price doubled
+    rpc.add("LEADER", "s1", fake_tx("LEADER", "TOK", 10_000, 5_000, 9 * 10**9, 11 * 10**9, t=NOW + 60))  # sells half
+    await copier.poll_once(NOW + 61)
+    assert abs(pos.token_amount - mine / 2) <= 1 and copier.state.realized_today() > 0
+
+    rpc.add("LEADER", "s2", fake_tx("LEADER", "TOK", 5_000, 0, 11 * 10**9, 12 * 10**9, t=NOW + 120))  # sells the rest
+    await copier.poll_once(NOW + 121)
+    assert "TOK" not in copier.state.positions
+    rows = (tmp_path / "trades.csv").read_text().splitlines()
+    assert [r.split(",")[2] for r in rows[1:]] == ["buy", "partial", "sell"]
+
+
+async def test_copy_trader_skips_late_small_and_unsafe_buys(tmp_path):
+    from memebot.copytrade import CopyTrader
+
+    c = cfg(tmp_path, copy_wallets="L", copy_min_leader_sol=0.1, copy_max_delay_sec=30)
+    jup = FakeJupiter()
+    rpc = FakeRPC()
+    copier = CopyTrader(c, rpc, FakeSafety(bad={"BAD"}), jup, PaperExecutor(c, jup, 2 * LAMPORTS_PER_SOL),
+                        BotState(path=c.state_file))
+    await copier.start()
+    rpc.add("L", "late", fake_tx("L", "LATE", None, 10, 10**10, 9 * 10**9, t=NOW - 120))  # seen 2 min late
+    rpc.add("L", "tiny", fake_tx("L", "TINY", None, 10, 10**10, 10**10 - 10**7, t=NOW))  # 0.01 SOL
+    rpc.add("L", "bad", fake_tx("L", "BAD", None, 10, 10**10, 9 * 10**9, t=NOW))  # fails safety checks
+    await copier.poll_once(NOW)
+    assert not copier.state.positions and "BAD" in copier.state.blacklist

@@ -26,6 +26,7 @@ class BotState:
     pumped: dict[str, float] = field(default_factory=dict)  # mint -> last time its 1h change was above PUMPED_H1_PCT
     loss_streak: int = 0  # losing trades in a row
     paused_until: float = 0.0  # unix time; no new buys before this (losing-streak pause)
+    copy_cursor: dict[str, str] = field(default_factory=dict)  # copied wallet -> last signature processed
     paper_balance: int | None = None
 
     @classmethod
@@ -43,6 +44,7 @@ class BotState:
             pumped=raw.get("pumped", {}),
             loss_streak=int(raw.get("loss_streak", 0)),
             paused_until=float(raw.get("paused_until", 0.0)),
+            copy_cursor=raw.get("copy_cursor", {}),
             paper_balance=raw.get("paper_balance"),
         )
 
@@ -55,6 +57,7 @@ class BotState:
             "pumped": dict(list(self.pumped.items())[-5000:]),
             "loss_streak": self.loss_streak,
             "paused_until": self.paused_until,
+            "copy_cursor": self.copy_cursor,
             "paper_balance": self.paper_balance,
         }
         tmp = self.path + ".tmp"

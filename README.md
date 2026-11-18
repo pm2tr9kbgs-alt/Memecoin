@@ -73,6 +73,26 @@ Jupiter, and sells on take-profit, stop-loss, trailing stop or a time limit.
 State (open positions, daily P&L, blacklist) is kept in `state.json`, so a restart picks up where it left off.
 Every fill is appended to `trades.csv`, and logs go to `bot.log`.
 
+## Copy trading
+
+`python -m memebot copy` (or `windows\2c-paper-COPY.bat`) mirrors the trades of the wallets in `COPY_WALLETS`:
+
+1. Every `COPY_POLL_SEC` (2 s) it checks each wallet for new transactions on the Solana RPC.
+2. When a wallet buys a token with at least `COPY_MIN_LEADER_SOL` (0.1 SOL), and the bot noticed within
+   `COPY_MAX_DELAY_SEC` (30 s), it runs the usual safety checks (rug checks and the buy/sell quote test) and buys
+   `COPY_BUY_AMOUNT_SOL`.
+3. When that wallet sells, it sells the same share of its own position (everything, if they sold everything).
+   There is no other exit unless you set `COPY_STOP_LOSS_PCT`.
+
+The usual limits still apply (`MAX_OPEN_POSITIONS`, `MIN_SOL_RESERVE`, `DAILY_LOSS_LIMIT_SOL`). With the free
+public RPC, a copy lands a few seconds after the original, often at a worse price; a paid RPC (`RPC_URL`) is faster.
+Some successful wallets sell into the buying of their copiers, so test any wallet in paper mode first.
+
+**Finding wallets:** `python -m memebot.findwallets --runners runners.json` takes tokens that ran up (mint, symbol,
+rise, start time), finds the wallets that bought each one early, keeps those that did it on several runners, and
+profiles their recent history: realized profit, win rate, trade size and holding time. Sub-2-minute sniper bots are
+left out, because they can't be copied with a few seconds of delay.
+
 ## Windows (no command line needed)
 
 1. Install Python 3.11+ from python.org and tick **"Add python.exe to PATH"**.
@@ -81,8 +101,9 @@ Every fill is appended to `trades.csv`, and logs go to `bot.log`.
    - `1-setup.bat`: installs everything and creates `.env`
    - `2a-paper-STRICT.bat` (blue window): paper trading with the default filters → `trades-strict.csv`
    - `2b-paper-LOOSE.bat` (yellow window): paper trading with looser filters → `trades-loose.csv`
+   - `2c-paper-COPY.bat` (green window): paper copy trading of the wallets in `COPY_WALLETS` → `trades-copy.csv`
      (run them at once to compare; each has its own balance and files)
-   - `3a-status-STRICT.bat` / `3b-status-LOOSE.bat`: balance and open positions for each
+   - `3a-status-STRICT.bat` / `3b-status-LOOSE.bat` / `3c-status-COPY.bat`: balance and open positions for each
    - `4-live-trading.bat`: real trading (needs `PRIVATE_KEY` and `MODE=live` in `.env`)
    - `5-sell-everything.bat`: emergency exit
 4. Edit settings with Notepad: right-click `.env` → Open with → Notepad.

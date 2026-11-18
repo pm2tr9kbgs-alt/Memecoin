@@ -1,4 +1,4 @@
-"""Command line entry point: python -m memebot {run,status,sell-all,wallet}."""
+"""Command line entry point: python -m memebot {run,copy,status,sell-all,wallet}."""
 from __future__ import annotations
 
 import argparse
@@ -12,6 +12,7 @@ import httpx
 
 from .bot import Bot, sol
 from .config import LAMPORTS_PER_SOL, SOL_MINT, Config
+from .copytrade import CopyTrader
 from .dexscreener import DexScreener
 from .executor import LiveExecutor, PaperExecutor
 from .jupiter import Jupiter, NoRouteError, out_amount
@@ -84,6 +85,31 @@ async def cmd_run(cfg: Config, assume_yes: bool) -> None:
         log.info("stopped; %d open position(s) saved to %s", len(bot.state.positions), cfg.state_file)
 
 
+async def cmd_copy(cfg: Config, assume_yes: bool) -> None:
+    async with httpx.AsyncClient(headers={"User-Agent": "memebot/1.0"}) as client:
+        bot = build(cfg, client)  # same executor, state, safety checks and Jupiter client as the momentum bot
+        copier = CopyTrader(cfg, SolanaRPC(client, cfg.rpc_url), bot.safety, bot.jup, bot.ex, bot.state, bot.dex)
+        log = logging.getLogger("memebot")
+        balance = await bot.ex.sol_balance()
+        if cfg.is_live:
+            log.warning("LIVE COPY TRADING with wallet %s, balance %s", bot.ex.pubkey, sol(balance))
+            if not assume_yes:
+                if not sys.stdin.isatty() or input("Type LIVE to start copying with real funds: ").strip() != "LIVE":
+                    log.error("Not confirmed; exiting. Use --yes to skip this prompt.")
+                    return
+            await bot.reconcile()
+        else:
+            log.info("PAPER COPY TRADING, simulated balance %s", sol(balance))
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                loop.add_signal_handler(sig, copier.stop)
+            except NotImplementedError:  # Windows
+                pass
+        await copier.run()
+        log.info("stopped; %d open position(s) saved to %s", len(bot.state.positions), cfg.state_file)
+
+
 async def cmd_status(cfg: Config) -> None:
     async with httpx.AsyncClient() as client:
         bot = build(cfg, client)
@@ -128,6 +154,8 @@ def main(argv: list[str] | None = None) -> None:
     sub = ap.add_subparsers(dest="cmd", required=True)
     run_p = sub.add_parser("run", help="start trading")
     run_p.add_argument("--yes", action="store_true", help="skip the live-trading confirmation prompt")
+    copy_p = sub.add_parser("copy", help="copy the trades of the wallets in COPY_WALLETS")
+    copy_p.add_argument("--yes", action="store_true", help="skip the live-trading confirmation prompt")
     sub.add_parser("status", help="show balance and open positions")
     sub.add_parser("sell-all", help="sell every open position now")
     sub.add_parser("wallet", help="print the wallet public key")
@@ -149,6 +177,8 @@ def main(argv: list[str] | None = None) -> None:
 def _dispatch(args, cfg: Config) -> None:
     if args.cmd == "run":
         asyncio.run(cmd_run(cfg, args.yes))
+    elif args.cmd == "copy":
+        asyncio.run(cmd_copy(cfg, args.yes))
     elif args.cmd == "status":
         asyncio.run(cmd_status(cfg))
     elif args.cmd == "sell-all":

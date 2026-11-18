@@ -103,6 +103,8 @@ class Position:
     partial_steps: int = 0  # take-profit ladder levels already sold
     original_tokens: int = 0  # tokens held before any ladder sells (ladder sizes are based on this)
     realized_lamports: int = 0  # profit already locked in by partial sells
+    copied_from: str = ""  # copy trading: the wallet whose buy this position copies
+    leader_tokens: int = 0  # copy trading: that wallet's holding of this token, to mirror partial sells
 
     def pnl_pct(self, value_lamports: int) -> float:
         if self.entry_lamports <= 0:
